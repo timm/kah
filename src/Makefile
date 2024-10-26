@@ -20,10 +20,13 @@ push: ## commit to main
 	- echo -en "$(LOUD)Why this push? $(SOFT)" ;  read x ; git commit -am "$$x" ;  git push
 	- git status
 
-~/tmp/%.html : %.lua
-	pycco -d ~/tmp $^
+../docs/%.html : %.lua
+	pycco -d ../docs  $^
 	echo "p { text-align: right; }" >> ~/tmp/pycco.css
 	open $@
+
+../docs/index.html : ../docs/kah.html
+	cp $^ $@
 
 ~/tmp/%.pdf : %.lua  ## make pdf
 	@mkdir -p docs
