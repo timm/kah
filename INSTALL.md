@@ -1,6 +1,6 @@
 # INSTALL
 
-
+This whole system is one file [src/kah.lua](src/kah.lua)
 |Essential      | Optional  | Install   | Make directory  |
 |--------------:|-----------|:----------:|:--------------:|
 |               | ~/tmp     |            |  y             |
