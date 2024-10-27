@@ -30,7 +30,8 @@ OPTIONS:
 
   -B Bootstraps num.of bootstraps        = 256
   -c conf       statistical confidence   = .05
-  -C Cliffs     threshjold for cliffs    = .195
+  -C Cohen      Cohen's threshold        = .35
+  -d delta      Cliff's delta            = .195
   -h help       show help                = false
   -k k          bayes control            = 1
   -m m          bayes control            = 2
@@ -47,10 +48,10 @@ local abs, cos, exp, log = math.abs, math.cos, math.exp, math.log
 local max, min, pi, sqrt = math.max, math.min, math.pi, math.sqrt
 local R                  = math.random
 
-local SYM,NUM,DATA,COLS = {},{},{},{}
+local SYM, NUM, DATA, COLS, SOME = {}, {}, {}, {}, {}
 local big = 1E32
       
------------------ ----------------- ----------------- ----------------- ------------------
+----------------- ----------------- ----------------- ----------------- ------------------
 -- ## Utilities
 -- In Lua, things have to be defined before they are used. So utilities
 -- come before classes.
@@ -210,7 +211,7 @@ local function cli(t)
 -- Before each one, reset the random number seed to its default.
 -- After each one that crashes or returns `false`, add one to `fails` counter.
 -- Return the sum of the failures to the operator system.
-local function tests(eg,tests,      FN)
+local function tests(eg,tests,      FN,_)
   FN = function(x,     ok,msg,bad) 
          math.randomseed(the.rseed)
          ok,msg = xpcall(eg[x], debug.traceback, _)
@@ -280,7 +281,10 @@ function NUM:norm(x)
 -- Reports the adjusted mean difference between two NUMs.
 function NUM:delta(other)
   return abs(self.mu - other.mu) / ((1E-32 + self.sd^2/self.n + other.sd^2/other.n)^.5) end
-             
+ 
+function NUM:pooledSd(other)
+  return sqrt(((self.n-1)*self.sd^2 + (other.n-1)*other.sd^2) / (self.n + other.n-2)) end
+
 ----------------- ----------------- ----------------- ----------------- -----------------  
 -- ## COLS
 -- COLS are factories for generating NUMs or SYMs from a list of column names.
@@ -392,7 +396,7 @@ local function cliffs(xs,ys)
        n = n + 1
        if y > x then gt = gt + 1 end
        if y < x then lt = lt + 1 end end end
-  return abs(gt - lt)/n <= the.Cliffs end -- 0.195 
+  return abs(gt - lt)/n <= the.delta end -- 0.195 
 
 -- `boostrap(list[num], list[num]) --> bool`   
 -- `Delta0` is an observation that compute an observation between two  lists.
@@ -413,7 +417,19 @@ local function bootstrap(y0,z0)
     n = n + (this:delta(that) > delta0 and 1 or 0) end
   return n / b >= the.conf end
 
----------------- ----------------- ----------------- ----------------- -----------------  
+function SOME:new(txt,sample,beats)
+  return new(SOME, {txt=txt, all={}, beats=beats, sample=(sample or 0), num=NUM:new()}) end
+
+function SOME:add(x)
+  push(self.all, x)
+  self.num:add(x) end
+
+function SOME:delta(other, eps, base,      sd)
+  sd = self.num:pooled(other.num) 
+  if abs(self.mu - other.mu) < sd *(eps or 0) then return 0 end
+  if cliffs(self.all,other.all) and bootstrap(self.all, other.all) then return 0 end
+  return (self.mu - other.mu)/(base or 1) end
+---------------- ----------------- ----------------- ----------------- -----------------  
 -- ## EG
 -- Store start-up actions.
 
@@ -487,13 +503,13 @@ function EG.like(   d,n)
       print(fmt("%.3f %s",d:loglike(row,#d.rows,2), o(row))) end end  end
 
 -- One experiment, where we do a guided search of some data.
-function EG.acquire()
+function EG.acquire(     d, train,test)
   d = DATA:new():read(the.train) 
   train,test = d:acquire() 
   print(d:ydist(train), d:ydist(test)) end
 
 -- Another experiment, for multiple command line csv files, for guided search of some data.
-function EG.acquire(     d,y,trains,tests,train,test,r,asIs,num0,num1,num2,eps,diff)
+function EG.acquirea(     d,y,trains,tests,train,test,r,asIs,num0,num1,num2,eps,diff)
   r = 20
   for file,d in datas(arg) do
       Y= function(r) return d:ydist(r) end
@@ -513,7 +529,7 @@ function EG.acquire(     d,y,trains,tests,train,test,r,asIs,num0,num1,num2,eps,d
         oo{file=file:gsub(".*/",""), n=the.Stop, eps=eps,mu0=asIs.mu, mu1=num1.mu, mu2=num2.mu,
            delta = same(train,tests) and 0 or abs(diff) < eps and 0 or diff} end end end 
       
------------------ ----------------- ----------------- ----------------- -----------------  
+----------------- ----------------- ----------------- ----------------- -----------------  
 -- ## Start-up
 
 -- Build the settings from the help string.
