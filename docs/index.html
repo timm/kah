@@ -36,6 +36,27 @@ src="https://img.shields.io/badge/license-MIT-brightgreen?logo=open-source-initi
         <a class='octothorpe' href='#section-0'>#</a>
       </div>
       <!-- vim : set tabstop=2 shiftwidth=2 expandtab : -->
+<ul>
+<li>This Lua script is a program designed for sequential
+  model-based optimization using a Tree-structured Parzen Estimator
+  (TPE) and a Bayesian classifier. It facilitates experimentation
+  with various configuration parameters, making it suitable for tasks
+  involving statistical confidence testing, bootstrap sampling, and
+  classification.</li>
+<li>Users can specify a training data file and adjust several experiment
+  settings to fit different data or optimization tasks. The script
+  includes commands for displaying help, setting a random seed, and
+  selecting data partitions for training and testing. </li>
+<li>For a review of the code intelligence, look below for <code>acquire</code>.</li>
+<li>The code is divided into four sections:<ul>
+<li>A help string, from which we parse out the settings (into a variable called <code>the</code>);</li>
+<li>Some general utility functions;</li>
+<li>Some classes;</li>
+<li>A library of start-up actions called <code>EG</code>;</li>
+<li>The actual start-up actions.</li>
+</ul>
+</li>
+</ul>
     </div>
     <div class='code'>
       <div class="highlight"><pre><span></span><span class="kd">local</span> <span class="n">the</span><span class="p">,</span><span class="n">help</span> <span class="o">=</span> <span class="p">{},</span><span class="s">[[</span>
@@ -848,8 +869,8 @@ Return the distance from a row&rsquo;s goals to best values for each goal.</p>
 <li>Use that classifier to sort the unlabelled
    examples by their likelihood of belong to best or rest. </li>
 <li>Label the first and last items in that sort.</li>
-<li>If you label more items, go to 2. Else&hellip;</li>
-<li>Use the classifier to sort the remaining
+<li>If can you label more items, then go to 2. Else&hellip;</li>
+<li>&hellip; use the classifier to sort the remaining
    unlabelled examples. Repor the best in that test set.</li>
 </ol>
     </div>

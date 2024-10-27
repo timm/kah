@@ -1,18 +1,22 @@
 #!/usr/bin/env lua 
 -- <!-- vim : set tabstop=2 shiftwidth=2 expandtab : -->
--- This Lua script is a program designed for sequential
--- model-based optimization using a Tree-structured Parzen Estimator
--- (TPE) and a Bayesian classifier. It facilitates experimentation
--- with various configuration parameters, making it suitable for tasks
--- involving statistical confidence testing, bootstrap sampling, and
--- classification.
---      
--- Users can specify a training data file and adjust several experiment
--- settings to fit different data or optimization tasks. The script
--- includes commands for displaying help, setting a random seed, and
--- selecting data partitions for training and testing. 
---    
--- For a review of the code intelligence, look below for `acquire`.
+-- - This Lua script is a program designed for sequential
+--   model-based optimization using a Tree-structured Parzen Estimator
+--   (TPE) and a Bayesian classifier. It facilitates experimentation
+--   with various configuration parameters, making it suitable for tasks
+--   involving statistical confidence testing, bootstrap sampling, and
+--   classification.
+-- - Users can specify a training data file and adjust several experiment
+--   settings to fit different data or optimization tasks. The script
+--   includes commands for displaying help, setting a random seed, and
+--   selecting data partitions for training and testing. 
+-- - For a review of the code intelligence, look below for `acquire`.
+-- - The code is divided into four sections:
+--     - A help string, from which we parse out the settings (into a variable called `the`);
+--     - Some general utility functions;
+--     - Some classes;
+--     - A library of start-up actions called `EG`;
+--     - The actual start-up actions.
 local the,help = {},[[
 
 kah.lua : how to change your mind (using TPE + Bayes classifier)
@@ -354,8 +358,8 @@ function DATA:ydist(row, D)
 -- 4. Use that classifier to sort the unlabelled
 --    examples by their likelihood of belong to best or rest. 
 -- 5. Label the first and last items in that sort.
--- 6. If you label more items, go to 2. Else...
--- 7. Use the classifier to sort the remaining
+-- 6. If can you label more items, then go to 2. Else...
+-- 7. ... use the classifier to sort the remaining
 --    unlabelled examples. Repor the best in that test set.
 function DATA:acquire()
   local Y,B,R,BR,test,train,todo,done,best,rest
