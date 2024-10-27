@@ -3,7 +3,7 @@
 local the,help = {},[[
 
 kah.lua : how to change your mind (using TPE + Bayes classifier)
-(c) 2024 Tim Menzies (timm@ieee.org). BSD-2 license
+(c) 2024 Tim Menzies (timm@ieee.org). MIT license.
 
 USAGE: 
   chmod +x kah.lua
@@ -22,7 +22,7 @@ OPTIONS:
   -s start      init number of samples   = 4
   -S Stop       max number of labellings = 30
   -H Holdout    testing hold our ratio   = .33
-  -t train      data                     = ../../moot/optimize/misc/auto93.csv 
+  -t train      data                     = ../test/auto93.csv 
 ]]
 
 local fmt, pop           = string.format, table.remove
@@ -32,16 +32,19 @@ local R                  = math.random
 
 local SYM,NUM,DATA,COLS = {},{},{},{}
 local big = 1E32
-local fail, pass= "❌","✅"
       
 ----------------- ----------------- ----------------- ----------------- ------------------
 -- ## Utilities
+-- In Lua, things have to be defined before they are used. So utilities
+-- come before classes.
 -- ###  Lists
 
--- _push(list,atom) --> atom_
+-- `push(list,atom) --> atom`   
+-- Add `atom` to end of `list`.
 local function push(t,x) t[1+#t] = x; return x end
 
--- `split(list, n:int=#list) -> list,list`
+-- `split(list, n:int=#list) -> list,list`     
+-- Return the first `n` items in one list, then the other items in a second list.
 local function split(t,n)
   local u,v = {},{}
   for j,x in pairs(t) do push(j <= n and u or v,x) end
@@ -49,56 +52,66 @@ local function split(t,n)
 
 -- ### Random 
 
--- _any(list) --> Any_
+-- `any(list) --> Any`  
+-- Return any one item from `list`.
 local function any(t)    
   return t[R(#t)] end
 
--- _many(list, n=#list) --> list_
+-- `many(list, n=#list) --> list`  
+-- Return `n` items from `list`.
 local function many(t,n,  u) 
   u={}; for i=1,(n or #t) do u[i] = any(t) end; return u end
 
--- _normal(mu:num=0, sd:num) --> num_
+-- `normal(mu:num=0, sd:num) --> num`   
+-- Return a value from a normal distribution.
 local function normal(mu,sd) 
    return (mu or 0)+(sd or 1)*sqrt(-2*log(R()))*cos(2*pi*R()) end
+
 -- ### Sorting
 
--- _lt(atom) --> function_
+-- `lt(atom) --> function`    
+-- Return a function to sort ascending on key `x`.
 local function lt(x) 
   return function(a,b) return a[x] < b[x] end end
 
---  _shuffle(list) --> list_   
--- `shuffle` does not change the input list. `
+--  `shuffle(list) --> list`   
+-- Randomly rearrange items in `list`.
 local function shuffle(t,    j)
   for i = #t, 2, -1 do j = R(i); t[i], t[j] = t[j], t[i] end
   return t end
 
--- _sort(list, callable=function(x) return x end) --> list_  
--- `sort` reorders the input list. 
+-- `sort(list, callable=function(x) return x end) --> list`  
+-- Return `list`, sorted by `fn`.
 local function sort(t,fn) 
   table.sort(t,fn); return t end
 
---- ### Mapping
+-- ### Mapping
 
--- _adds(Any, list) --> Any_
+-- `adds(Any, list) --> Any`    
+-- Add all items in `list` to `it`.
 local function adds(it,t)
   for _,x in pairs(t or {}) do it:add(x) end; return it end
 
--- _kap(list, callable) --> list_   
+-- `kap(list, callable) --> list`   
 -- `kap` calls `fn` with  key and value.
 local function kap(t,fn,    u) --> list
   u={}; for k,v in pairs(t) do u[1+#u]=fn(k,v)  end; return u end
 
--- _map(list, callable) --> list_     
+-- `map(list, callable) --> list`     
 -- `kap` calls `fn` with  value.
 local function map(t,fn,     u) --> list
   u={}; for _,v in pairs(t) do u[1+#u] = fn(v)  end; return u end
 
--- _sum(list,callable) --> num_
+-- `sum(list,callable) --> num`   
+-- Return sum of items in `list`, filtered by `fn`.
 local function sum(t,fn,     n)
   n=0; for _,x in pairs(t) do n=n+(fn and fn(x) or x) end; return n end
 
--- _keysort(list, callable) --> list_    
--- Recommended over `sort` is `callable` is slow to compute.
+-- `keysort(list, callable) --> list`    
+-- The Schwartzian transform is a computer programming technique
+-- that uses the decorate-sort-undecorate idiom to improve the efficiency
+-- of sorting a list of items.
+-- Recommended over `sort` when `callable` is slow to compute.
 local function keysort(t,fn,     DECORATE,UNDECORATE)
   DECORATE   = function(x) return {fn(x),x} end
   UNDECORATE = function(x) return x[2] end
@@ -106,13 +119,15 @@ local function keysort(t,fn,     DECORATE,UNDECORATE)
 
 -- ### String to thing
 
--- `coerce(str) -> bool | int | float | str`
+-- `coerce(str) -> bool | int | float | str`  
+-- Convert  a string into some atom.
 local function coerce(s,     F,TRIM) 
   TRIM= function(s) return s:match"^%s*(.-)%s*$" end
   F   = function(s) return s=="true" and true or s ~= "false" and s end
   return math.tointeger(s) or tonumber(s) or F(TRIM(s)) end
 
--- _csv(str) --> Iterator --> list_
+-- `csv(str) --> Iterator --> list`   
+-- Returns an iterator for reading lines in a csv file.
 local function csv(file,     src)
   if file and file ~="-" then src=io.input(file) end
   return function(     s,t)
@@ -121,17 +136,21 @@ local function csv(file,     src)
     then if src then io.close(src) end 
     else t={}; for s1 in s:gmatch"([^,]+)" do push(t,coerce(s1)) end; return t end end end
 
-local function datas(      i)
+-- `datas(list[str]) --> Iterator --> list`  
+-- For any string ending in "csv", return that file as a DATA.
+local function datas(t,      i)
   i=0
   return function()
-    while i<#arg do
+    while i<#t do
       i = i+1
-      if arg[i]:find"csv" then
-        return arg[i], DATA:new():read(arg[i]) end end end end
+      if t[i]:find"csv" then
+        return t[i], DATA:new():read(t[i]) end end end end
 
 -- ### Thing to string
 
--- _o(atom | dict | list) --> str_
+-- `o(atom | dict | list) --> str`   
+-- Generate a string from any atom or nested structure. Skip over
+-- private stuff (i.e. anything whose key starts with "_").
 local function o(x,     F,G,GO) --> str
   F  = function() return #x>0 and map(x,o) or sort(kap(x,G)) end
   G  = function(k,v) if GO(k) then return fmt(":%s %s",k,o(x[k])) end end
@@ -140,14 +159,15 @@ local function o(x,     F,G,GO) --> str
          type(x)~="table"  and tostring(x) or 
          "{" .. table.concat(F()," ") .. "}" end 
 
--- _oo(atom | dict | list) --> nil_     
+-- `oo(atom | dict | list) --> nil`     
 -- Prints the string generated by `o`.
 local function oo(x) 
   print(o(x)) end
 
--- ### polymorphism
+-- ### Polymorphism
 
--- _new(list, list) --> list_
+-- `new(list, dict) --> dict`    
+-- Return a dictionary that knows where to find its methods.
 local function new(klass, obj)
   klass.__index    = klass
   klass.__tostring = klass.__tostring or o
@@ -155,8 +175,10 @@ local function new(klass, obj)
 
 -- ### Start-up
 
--- _cli(dict) --> dict__    
--- Update slot xxx in `dict` if there is a command line flag `-x`
+-- `cli(dict) --> dict`        
+-- Update slot xxx in `dict` if there is a command line flag `-x`.
+-- For any slot `-x`  with an existing boolean value, then the flag `-x`
+-- negates the default.
 local function cli(t)
   for k,v in pairs(t) do
     v = tostring(v)
@@ -166,35 +188,55 @@ local function cli(t)
     t[k] = coerce(v) end 
   return t end
 
--- `tests(dict[str,callable], list[str])`
-local function tests(eg,all,      fails,ok,msg) 
-  fails = 0
-  for _,x in pairs(all) do
-    math.randomseed(the.rseed)
-    ok,msg = xpcall(eg[x], debug.traceback, _)
-    if   ok == false or msg == false 
-    then print(fail.." FAIL on "..x); fails = fails + 1
-    else print(pass.." PASS on "..x) end end 
-  os.exit(fails) end
+-- `tests(dict[str,callable], list[str])`   
+-- For the tests stored in `eg` run those names in `tests`.
+-- Before each one, reset the random number seed to its default.
+-- After each one that crashes or returns `false`, add one to `fails` counter.
+-- Return the sum of the failures to the operator system.
+local function tests(eg,tests,      FN)
+  FN = function(x,     ok,msg,bad) 
+         math.randomseed(the.rseed)
+         ok,msg = xpcall(eg[x], debug.traceback, _)
+         bad = ok==false or msg==false
+         print((bad and "❌" or "✅") .." on "..x)
+         return bad and 1 or 0 end
+  os.exit(sum(tests, FN)) end
 
 ---------------- ----------------- ----------------- ----------------- -----------------
+-- ## SYM
+-- SYMs  summarize a stream of atoms seen in column `at`.
+
+-- `:new(str, int) --> SYM`
 function SYM:new(txt,at) 
   return new(SYM, {at=at, txt=txt, n=0, has={}, most=0, mode=nil}) end
 
+-- `:add(x) --> nil`      
+-- Add an atom to a SYM.
 function SYM:add(x)
   if x~="?" then
     self.n = self.n + 1
     self.has[x] = 1 + (self.has[x] or 0) 
     if self.has[x] > self.most then self.most, self.mode = self.has[x], x end end end
 
+--  `:like(num, num) --> num`   
+-- Report how much `x` might belong to a SYMbolic distribution.
 function SYM:like(x,prior)
   return  ((self.has[x] or 0) + the.m*prior) / (self.n + the.m)  end
 
 ----------------- ----------------- ----------------- ----------------- -----------------  
-function NUM:new(txt,at) 
+-- ## NUM
+-- NUMs summarize a stream of numbers seen in column `at`.
+
+-- `:new(str, int) --> NUM`  
+-- If a NUM's name end in `-` then its goal is to be minimized (so we set that to `0`). 
+function NUM:new(txt, at) 
   return new(NUM, {at=at, txt=txt, n=0, mu=0, m2=0, sd=0, lo=big, hi= -big,
                    goal = (txt or ""):find"-$" and 0 or 1}) end
 
+-- `:add(num) --> nil`  
+-- Updates a NUM with `x` using the 
+-- [Welford on-line](https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm).
+-- algorithm.
 function NUM:add(x)
   if x~="?" then
     self.n = self.n + 1
@@ -205,18 +247,32 @@ function NUM:add(x)
     if x > self.hi then self.hi = x end
     if x < self.lo then self.lo = x end end end
 
+-- `:like(num) --> num`  
+-- Report how much `x` might belong to a NUMbolic distribution.
 function NUM:like(x,_,      v,tmp)
   v = self.sd^2 + 1/big
   tmp = exp(-1*(x - self.mu)^2/(2*v)) / (2*pi*v) ^ 0.5
   return max(0,min(1, tmp + 1/big)) end
-  
+ 
+-- `:norm(num) --> 0..1`  
+-- Map `x` to the range 0..1 for `lo`..`hi`.
 function NUM:norm(x)
   return x=="?" and x or (x - self.lo)/(self.hi - self.lo) end
        
-function NUM:delta(other,      y,z,e)
+-- `:delta(num) -> num`   
+-- Reports the adjusted mean difference between two NUMs.
+function NUM:delta(other)
   return abs(self.mu - other.mu) / ((1E-32 + self.sd^2/self.n + other.sd^2/other.n)^.5) end
              
 ----------------- ----------------- ----------------- ----------------- -----------------  
+-- ## COLS
+-- COLS are factories for generating NUMs or SYMs from a list of column names.
+
+-- `:new(list[str]) --> COLS`   
+-- Upper case words become NUMs, others become SYMs. Words ending with `X`
+-- are ignored, others get listed in `self.x` (for independent input observatbles)
+-- and `self.y` (for dependent goals). Also remember the names as `self.cols` 
+-- (which will be used if ever we want to copy the structure of one DATA to another).
 function COLS:new(names)
   local all,x,y = {},{},{}
   for at,txt in pairs(names) do 
@@ -225,63 +281,93 @@ function COLS:new(names)
       push(txt:find"[!+-]$" and y or x, all[#all]) end end
   return new(COLS, {names=names, all=all, x=x, y=y}) end
 
+-- _:add(list) --> list_    
+-- Update the column summaries from `row`.
+function COLS:add(row)
+  for _,col in pairs(self.all) do col:add(row[col.at]) end 
+  return row end
+
 ----------------- ----------------- ----------------- ----------------- -----------------  
+-- ## DATA
+-- DATAs store `rows`, summarizes into `col`umns of NUMs or SYMS.
+
+-- `:new() --> DATA`    
 function DATA:new()
   return new(DATA, {cols=nil, rows={}})  end
 
-function DATA:read(src)
-  for row in csv(src) do self:add(row) end; return self end
+-- `:read(str) --> DATA`   
+-- Fill in the `rows` of a DATA from a csv `file`.
+function DATA:read(file)
+  for row in csv(file) do self:add(row) end; return self end
 
+-- `:adds(list[list]) --> DATA`   
+-- Fill in the `rows` of a DATA from a list or rows.
 function DATA:adds(t)
   for row in pairs(t or {}) do self:add(row) end; return self end
 
+-- `:add(list) --> nil`   
+-- Add `row` to a DATA. If this is the first row then use it to initialize the columns.
 function DATA:add(row) 
-  if self.cols then
-    push(self.rows, row)
-    for _,col in pairs(self.cols.all) do col:add(row[col.at]) end 
-	else
-	  self.cols= COLS:new(row) end end 
+  if   self.cols 
+  then push(self.rows,self.cols:add(row)) 
+  else self.cols=COLS:new(row) end end 
 
+-- `:clone(list[list]={}) --> DATA`   
+-- Return a new DATA with same structure as self. If `rows` is supplied, that add that.
 function DATA:clone(rows) 
-  return adds(adds(DATA:new(), {self.cols.names}),rows) end
-    
-function DATA:loglike(row, nall, nh)
-  local prior,out,tmp
+  return DATA:new():adds({self.cols.names}):adds(rows) end
+   
+-- `:loglike(list[list], int, int) --> num`   
+-- Report the log likelohood that `row` belongs to self (by multiplying the prior
+-- by the product of the liklihood of the evidence in `row`).  `nh` is the number of
+-- class (including this one) and `nall` is the number of rows in all classes.
+function DATA:loglike(row, nall, nh,          prior,F,G)
   prior = (#self.rows + the.k) / (nall + the.k*nh)
-  out,tmp = 0,log(prior)
-  for _,col in pairs(self.cols.y) do 
-    tmp = col:like(row[col.at], prior)
-    if tmp > 0 then
-       out = out + log(tmp) end end
-  return out end
+  F     = function(x) return G( x:like(row[x.at], prior) ) end
+  G     = function(n) return n>0 and log(n) or 0 end
+  return log(prior) + sum(self.cols.x, F) end
 
+-- `:ydist(list) --> 0..1`   
+-- Return the distance from a row's goals to best values for each goal.
 function DATA:ydist(row, D)
   D = function(y) return (abs(y:norm(row[y.at]) - y.goal))^the.p end
   return (sum(self.cols.y,D) /#self.cols.y)^(1/the.p) end
 
--- _DATA:active() --> list,list_
+-- `DATA:active() --> list,list`  
+--      
+-- 1. Sort a few labelled few examples. 
+-- 2. split them  into best and rest.
+-- 3. Use that split to  build a two-class classifier. 
+-- 4. Use that classifier to sort the unlabelled
+--    examples by their likelihood of belong to best or rest. 
+-- 5. Label the first and last items in that sort.
+-- 6. If you label more items, go to 2. Else...
+-- 7. Use the classifier to sort the remaining
+--    unlabelled examples. Repor the best in that test set.
 function DATA:acquire()
   local Y,B,R,BR,test,train,todo,done,best,rest
-  Y          = function(r) return self:ydist(r) end
-  B          = function(r) return best:loglike(r, #done, 2) end
-  R          = function(r) return rest:loglike(r, #done, 2) end
-  BR         = function(r) return B(r) - R(r) end
+  Y  = function(r) return self:ydist(r) end
+  B  = function(r) return best:loglike(r, #done, 2) end
+  R  = function(r) return rest:loglike(r, #done, 2) end
+  BR = function(r) return B(r) - R(r) end
   test,train = split(shuffle(self.rows), (the.Holdout * #self.rows))
-  done,todo  = split(train, the.start)
+  done,todo  = split(train, the.start)              --- [1]
   while true do
     done = keysort(done,Y)
-    if #done > the.Stop or #todo < 5 then break end
-    best,rest = split(done, sqrt(#done))
-    best,rest = self:clone(best), self:clone(rest)
-    todo      = keysort(todo,BR)
-    for _=1,2 do push(done, pop(todo));   push(done, pop(todo,1)) end
-  end
-  return done[1], keysort(test,BR)[#test] end
+    if #done > the.Stop or #todo < 5 then break end --- [6]
+    best,rest = split(done, sqrt(#done))            --- [2]
+    best,rest = self:clone(best), self:clone(rest)  --- [3]
+    todo = keysort(todo,BR)                         --- [4]
+    for _=1,2 do                                    --- [5]
+      push(done, pop(todo)); 
+      push(done, pop(todo,1)) end end
+  return done[1], keysort(test,BR)[#test] end       --- [7]
 
 ----------------- ----------------- ----------------- ----------------- -----------------  
 -- ## Stats
 
--- _cliffs(list[num], list[num]) --> bool_
+-- `cliffs(list[num], list[num]) --> bool`    
+-- Two lists are the same if items from one  fall  towards the middle of the other list.
 local function cliffs(xs,ys)
   local lt,gt,n = 0,0,0
   for _,x in pairs(xs) do
@@ -291,10 +377,14 @@ local function cliffs(xs,ys)
        if y < x then lt = lt + 1 end end end
   return abs(gt - lt)/n <= the.Cliffs end -- 0.195 
 
--- _boostrap(list[num], list[num]) --> bool_ 
+-- `boostrap(list[num], list[num]) --> bool`   
+-- `Delta0` is an observation that compute an observation between two  lists.
+-- Then we compare `delta0` to observations seen in hundreds of other random 
+-- samples from those lists. Two distributions are the same if we can't tell a 
+-- difference in those observations.
+-- Taken from non-parametric significance test From Introduction to Bootstrap,
+-- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
 local function bootstrap(y0,z0)
-  --non-parametric significance test From Introduction to Bootstrap,
-  -- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
   local x,y,z,delta0,yhat,zhat,n,this,that,b
   z,y,x  = adds(NUM:new(),z0), adds(NUM:new(),y0), adds(adds(NUM:new(),y0),z0)
   delta0 = y:delta(z)
@@ -306,47 +396,57 @@ local function bootstrap(y0,z0)
     n = n + (this:delta(that) > delta0 and 1 or 0) end
   return n / b >= the.conf end
 
-local function same(y,z)
-  return cliffs(y,z) and bootstrap(y,z) end
 ---------------- ----------------- ----------------- ----------------- -----------------  
+-- ## EG
+-- Store start-up actions.
+
 local EG={}
 
+-- All the tests we might run in an order simplest to more complex.
 function EG.all() 
   return tests(EG, {"any","sum","split","sort","num","sym","csv"}) end
 
+-- Random selection.
 function EG.any(  a)
   a = {10,20,30,40,50,60}
-	oo(map({any(a), many(a,3),shuffle(a),keysort(a,function(x) return -x end)},
+  oo(map({any(a), many(a,3),shuffle(a),keysort(a,function(x) return -x end)},
      o)) end 
 
+-- Summation.
 function EG.sum()
   assert(210 == sum{10,20,30,40,50,60}) end
 
+-- Split a list.
 function EG.split(    a,b,c)
   a={10,20,30,40,50,60}
-	b,c = split(a,3)
-	print(o(b), o(c)) end
+  b,c = split(a,3)
+  print(o(b), o(c)) end
 
+-- Sort a list.
 function EG.sort(    t)
   t={1,2,3,4,5,6,7}
   t=sort(t, function(x,y) return  x > y end)
   oo{10,4,5}
   oo(t) end
 
+-- Example of NUMs.
 function EG.num(    n) 
   n = NUM:new()
   for _ = 1,1000 do n:add( normal(10,2) ) end
   assert(10-n.mu < 0.1 and 2-n.sd < 0.03) end
 
+-- Example of SYMs.
 function EG.sym(    s) 
   s = adds(SYM:new(), {"a","a","a","a","b","b","c"})
-	print(s.mode, o(s.has)) end
+  print(s.mode, o(s.has)) end
 
+-- Show some rows from a csv file.
 function EG.csv(   d, n)
   print(the.train)
   n=0
   for row in csv(the.train) do n=n+1 ; if n==1 or n % 90==0 then oo(row) end end end
 
+-- Compare results from different statistical tests.
 function EG.stats(   r,t,u,d)
   d,r= 1,100
   while d< 1.2 do
@@ -356,10 +456,12 @@ function EG.stats(   r,t,u,d)
     print(fmt("%.3f    %s %s",d, cliffs(t,u) and "y" or ".", bootstrap(t,u) and "y" or "."))
   end end
 
+-- Fill a DATA from a csv file.
 function EG.data(   d)
   d = DATA:new():read(the.train) 
   assert(3184 == (sum(d.rows,function(r) return #r end))) end
 
+-- Check the likelihood calculations.
 function EG.like(   d,n)
   n,d = 0,DATA:new():read(the.train) 
   for _,row in pairs(d.rows) do 
@@ -367,11 +469,13 @@ function EG.like(   d,n)
     if n==1 or n % 15==0 then 
       print(fmt("%.3f %s",d:loglike(row,#d.rows,2), o(row))) end end  end
 
+-- One experiment, where we do a guided search of some data.
 function EG.acquire()
   d = DATA:new():read(the.train) 
   train,test = d:acquire() 
   print(d:ydist(train), d:ydist(test)) end
 
+-- Another experiment, for multiple command line csv files, for guided search of some data.
 function EG.acquire(     d,y,trains,tests,train,test,r,asIs,num0,num1,num2,eps,diff)
   r = 20
   for file,d in datas(arg) do
@@ -393,13 +497,18 @@ function EG.acquire(     d,y,trains,tests,train,test,r,asIs,num0,num1,num2,eps,d
            delta = same(train,tests) and 0 or abs(diff) < eps and 0 or diff} end end end 
       
 ----------------- ----------------- ----------------- ----------------- -----------------  
+-- ## Start-up
+
+-- Build the settings from the help string.
 help:gsub("%s+-%S%s(%S+)[^=]+=%s+(%S+)%s*\n", function(k,v) the[k]= coerce(v) end)
+
+-- If this is the main controlling file, the read the command line and explore the start-up
+-- examples.
 if o(arg):find"kah.lua" then
    the = cli(the)
    if the.help then os.exit(print(help)) end
    math.randomseed(the.rseed or 1)
-   map(arg, function(s) 
-               if EG[s:sub(3)] then EG[s:sub(3)]() end 
-             end) 
-end
-return {SYM=SYM, NUM=NUM, COLS=COLS, DATA=DATA, the=the,help=help}
+   map(arg, function(s) if EG[s:sub(3)] then EG[s:sub(3)]() end end) end
+
+-- Return code which other people can use.
+return {SYM=SYM, NUM=NUM, COLS=COLS, DATA=DATA, the=the, help=help}
