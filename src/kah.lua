@@ -1,5 +1,18 @@
 #!/usr/bin/env lua 
 -- <!-- vim : set tabstop=2 shiftwidth=2 expandtab : -->
+-- This Lua script is a program designed for sequential
+-- model-based optimization using a Tree-structured Parzen Estimator
+-- (TPE) and a Bayesian classifier. It facilitates experimentation
+-- with various configuration parameters, making it suitable for tasks
+-- involving statistical confidence testing, bootstrap sampling, and
+-- classification.
+--      
+-- Users can specify a training data file and adjust several experiment
+-- settings to fit different data or optimization tasks. The script
+-- includes commands for displaying help, setting a random seed, and
+-- selecting data partitions for training and testing. 
+--    
+-- For a review of the code intelligence, look below for `acquire`.
 local the,help = {},[[
 
 kah.lua : how to change your mind (using TPE + Bayes classifier)
