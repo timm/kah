@@ -326,17 +326,16 @@ function DATA:read(file)
 function DATA:adds(t)
   for row in pairs(t or {}) do self:add(row) end; return self end
 
--- `:add(list) --> nil`   
+-- `:add(list) --> DATA`   
 -- Add `row` to a DATA. If this is the first row then use it to initialize the columns.
 function DATA:add(row) 
-  if   self.cols 
-  then push(self.rows,self.cols:add(row)) 
-  else self.cols=COLS:new(row) end end 
+  if self.cols then push(self.rows,  self.cols:add(row)) else self.cols=COLS:new(row) end 
+  return self end 
 
 -- `:clone(list[list]={}) --> DATA`   
 -- Return a new DATA with same structure as self. If `rows` is supplied, that add that.
 function DATA:clone(rows) 
-  return DATA:new():adds({self.cols.names}):adds(rows) end
+  return DATA:new():add(self.cols.names):adds(rows) end
    
 -- `:loglike(list[list], int, int) --> num`   
 -- Report the log likelohood that `row` belongs to self (by multiplying the prior
@@ -344,9 +343,9 @@ function DATA:clone(rows)
 -- class (including this one) and `nall` is the number of rows in all classes.
 function DATA:loglike(row, nall, nh,          prior,F,G)
   prior = (#self.rows + the.k) / (nall + the.k*nh)
-  F     = function(x) return G( x:like(row[x.at], prior) ) end
-  G     = function(n) return n>0 and log(n) or 0 end
-  return log(prior) + sum(self.cols.x, F) end
+  F     = function(x) return L( x:like(row[x.at], prior) ) end
+  L     = function(n) return n>0 and log(n) or 0 end
+  return L(prior) + sum(self.cols.x, F) end
 
 -- `:ydist(list) --> 0..1`   
 -- Return the distance from a row's goals to best values for each goal.
@@ -360,7 +359,7 @@ function DATA:ydist(row, D)
 -- 2. split them  into best and rest.
 -- 3. Use that split to  build a two-class classifier. 
 -- 4. Use that classifier to sort the unlabelled
---    examples by their likelihood of belong to best or rest. 
+--    examples by their likelihood of belong to best, not rest. 
 -- 5. Label the first and last items in that sort.
 -- 6. If can you label more items, then go to 2. Else...
 -- 7. ... use the classifier to sort the remaining
@@ -371,7 +370,7 @@ function DATA:acquire()
   B  = function(r) return best:loglike(r, #done, 2) end
   R  = function(r) return rest:loglike(r, #done, 2) end
   BR = function(r) return B(r) - R(r) end
-  test,train = split(shuffle(self.rows), (the.Holdout * #self.rows))
+  test,train = split(shuffle(self.rows), the.Holdout * #self.rows)
   done,todo  = split(train, the.start)              --- [1]
   while true do
     done = keysort(done,Y)
