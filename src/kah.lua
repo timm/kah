@@ -43,13 +43,12 @@ OPTIONS:
   -t train      data                     = ../test/auto93.csv 
 ]]
 
-local SYM, NUM, DATA, COLS, SOME = {}, {}, {}, {}, {}
+local SYM, NUM, DATA, COLS, SOME = {}, {}, {}, {}, {}   
 
-local abs, cos, exp, log = math.abs, math.cos, math.exp, math.log
-local max, min, pi, sqrt = math.max, math.min, math.pi, math.sqrt
-local R                  = math.random
+local abs, cos, exp, log    = math.abs, math.cos, math.exp, math.log
+local max, min, pi, R, sqrt = math.max, math.min, math.pi, math.random, math.sqrt
       
----------------- ----------------- ----------------- ----------------- -----------------
+---------------- ----------------- ----------------- ----------------- -----------------
 -- ## SYM
 -- SYMs  summarize a stream of atoms seen in column `at`.
 
@@ -137,7 +136,7 @@ function COLS:add(row)
   for _,col in pairs(self.all) do col:add(row[col.at]) end 
   return row end
 
------------------ ----------------- ----------------- ----------------- -----------------  
+----------------- ----------------- ----------------- ----------------- -----------------  
 -- ## DATA
 -- DATAs store `rows`, summarizes into `col`umns of NUMs or SYMS.
 
@@ -200,24 +199,24 @@ function DATA:acquire()
   R  = function(r) return rest:loglike(r, #done, 2) end
   BR = function(r) return B(r) - R(r) end
   test,train = l.split(l.shuffle(self.rows), the.Holdout * #self.rows)
-  done,todo  = l.split(train, the.start)              --- [1]
+  done,todo  = l.split(train, the.start)            --- [1]
   while true do
     done = l.keysort(done,Y)
     if #done > the.Stop or #todo < 5 then break end --- [6]
-    best,rest = l.split(done, sqrt(#done))            --- [2]
+    best,rest = l.split(done, sqrt(#done))          --- [2]
     best,rest = self:clone(best), self:clone(rest)  --- [3]
-    todo = l.keysort(todo,BR)                         --- [4]
+    todo = l.keysort(todo,BR)                       --- [4]
     for _=1,2 do                                    --- [5]
       l.push(done, l.pop(todo)); 
       l.push(done, l.pop(todo,1)) end end
-  return done[1], l.keysort(test,BR)[#test] end       --- [7]
+  return done[1], l.keysort(test,BR)[#test] end     --- [7]
 
 ----------------- ----------------- ----------------- ----------------- -----------------  
 -- ## Stats
 
--- `cliffs(list[num], list[num]) --> bool`    
+-- `l.cliffs(list[num], list[num]) --> bool`    
 -- Two lists are the same if items from one  fall  towards the middle of the other list.
-local function cliffs(xs,ys)
+function l.cliffs(xs,ys)
   local lt,gt,n = 0,0,0
   for _,x in pairs(xs) do
      for _,y in pairs(ys) do
@@ -233,7 +232,7 @@ local function cliffs(xs,ys)
 -- difference in those observations.
 -- Taken from non-parametric significance test From Introduction to Bootstrap,
 -- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
-local function bootstrap(y0,z0)
+function l.bootstrap(y0,z0)
   local x,y,z,delta0,yhat,zhat,n,this,that,b
   local N= function(t) return l.adds(NUM:new(),t) end
   z,y,x  = N(z0), N(y0), l.adds(N(y0),z0)
@@ -254,7 +253,7 @@ function SOME:add(x)
 function SOME:delta(other, eps, base,      sd)
   sd = self.num:pooled(other.num) 
   if abs(self.mu - other.mu) < sd *(eps or 0) then return 0 end
-  if cliffs(self.all,other.all) and bootstrap(self.all, other.all) then return 0 end
+  if l.cliffs(self.all,other.all) and l.bootstrap(self.all, other.all) then return 0 end
   return (self.mu - other.mu)/(base or 1) end
 
 ----------------- ----------------- ----------------- ----------------- ------------------
@@ -271,15 +270,14 @@ function l.push(t,x) t[1+#t] = x; return x end
 -- Return the first `n` items in one list, then the other items in a second list.
 function l.split(t,n)
   local u,v = {},{}
-  for j,x in pairs(t) do push(j <= n and u or v,x) end
+  for j,x in pairs(t) do l.push(j <= n and u or v,x) end
   return u,v end
 
 -- ### Random 
 
 -- `l.any(list) --> Any`  
 -- Return any one item from `list`.
-function l.any(t)    
-  return t[R(#t)] end
+function l.any(t)  return t[R(#t)] end
 
 -- `l.many(list, n=#list) --> list`  
 -- Return `n` items from `list`.
@@ -306,8 +304,7 @@ function l.shuffle(t,    j)
 
 -- `l.sort(list, callable=function(x) return x end) --> list`  
 -- Return `list`, sorted by `fn`.
-function l.sort(t,fn) 
-  table.sort(t,fn); return t end
+function l.sort(t,fn) table.sort(t,fn); return t end
 
 -- ### Mapping
 
@@ -372,11 +369,15 @@ function l.datas(t,      i)
 
 -- ### Thing to string
 
+-- `l.fmt(str,...) --> str`   
+-- Return a string, formatted by fmt.
+l.fmt = string.format
+
 -- `l.o(atom | dict | list) --> str`   
 -- Generate a string from any atom or nested structure. Skip over
 -- private stuff (i.e. anything whose key starts with "_").
 function l.o(x,     F,G,GO) --> str
-  F  = function() return #x>0 and l.map(x,o) or l.sort(l.kap(x,G)) end
+  F  = function() return #x>0 and l.map(x,l.o) or l.sort(l.kap(x,G)) end
   G  = function(k,v) if GO(k) then return l.fmt(":%s %s",k,l.o(x[k])) end end
   GO = function(k,v) return not l.o(k):find"^_" end
   return type(x)=="number" and l.fmt("%g",x) or  
@@ -393,7 +394,7 @@ function l.oo(x) print(l.o(x)) end
 -- Return a dictionary that knows where to find its methods.
 function l.new(klass, obj)
   klass.__index    = klass
-  klass.__tostring = klass.__tostring or o
+  klass.__tostring = klass.__tostring or l.o
   return setmetatable(obj, klass) end
 
 -- ### Start-up
@@ -411,6 +412,112 @@ function l.cli(t)
     t[k] = l.coerce(v) end 
   return t end
 
+---------------- ----------------- ----------------- ----------------- -----------------  
+-- ## EG
+-- Store start-up actions.
+
+local EG={}
+
+-- All the tests we might run in an order simplest to more complex.
+function EG.tests() 
+  return l.tests(EG, {"any","sum","split","sort","num","sym","csv","stats"}) end
+
+-- Random selection.
+function EG.any(  a)
+  a = {10,20,30,40,50,60}
+  l.oo(l.map({l.any(a), l.many(a,3),l.shuffle(a),l.keysort(a,function(x) return -x end)},
+             l.o)) end
+
+-- Summation.
+function EG.sum()
+  assert(210 == l.sum{10,20,30,40,50,60}) end
+
+-- Split a list.
+function EG.split(    a,b,c)
+  a={10,20,30,40,50,60}
+  b,c = l.split(a,3)
+  print(l.o(b), l.o(c)) end
+
+-- Sort a list.
+function EG.sort(    t)
+  t={1,2,3,4,5,6,7}
+  t=l.sort(t, function(x,y) return  x > y end)
+  l.oo{10,4,5}
+  l.oo(t) end
+
+-- Example of NUMs.
+function EG.num(    n) 
+  n = NUM:new()
+  for _ = 1,1000 do n:add( l.normal(10,2) ) end
+  assert(10-n.mu < 0.1 and 2-n.sd < 0.03) end
+
+-- Example of SYMs.
+function EG.sym(    s) 
+  s = l.adds(SYM:new(), {"a","a","a","a","b","b","c"})
+  print(s.mode, l.o(s.has)) end
+
+-- Show some rows from a csv file.
+function EG.csv(   d, n)
+  print(the.train)
+  n=0
+  for row in l.csv(the.train) do n=n+1; if n==1 or n%90==0 then l.oo(row) end end end
+
+-- Compare results from different statistical tests.
+function EG.stats(   r,t,u,d,Y)
+  Y = function(s) return s and "y" or "." end
+  d,r= 1,100
+  while d< 1.2 do
+    t={}; for i=1,r do t[1+#t] = l.normal(10,2)^2 end 
+    u={}; for i,x in pairs(t) do u[i] = x*d end
+    d=d*1.01
+    n1,n2 = l.adds(NUM:new(),t), l.adds(NUM:new(),u)
+    print(
+      l.fmt("%.3f\t%s\t%s\t%s", d, Y(l.cliffs(t,u)), Y(l.bootstrap(t,u)), 
+                                   Y(abs(n1.mu - n2.mu) < .35*n1:pooledSd(n2)))) end end
+
+-- Fill a DATA from a csv file.
+function EG.data(   d)
+  d = DATA:new():read(the.train) 
+  assert(3184 == (l.sum(d.rows,function(r) return #r end))) end
+
+-- Check the likelihood calculations.
+function EG.like(   d,n)
+  n,d = 0,DATA:new():read(the.train) 
+  for _,row in pairs(d.rows) do 
+    n=n+1 
+    if n==1 or n % 15==0 then 
+      print(l.fmt("%.3f %s",d:loglike(row,#d.rows,2), l.o(row))) end end  end
+
+-- One experiment, where we do a guided search of some data.
+function EG.acquire(     d, train,test)
+  d = DATA:new():read(the.train) 
+  train,test = d:acquire() 
+  print(d:ydist(train), d:ydist(test)) end
+
+-- Another experiment, for multiple command line csv files, for guided search of some data.
+function EG.acquirea(     d,y,trains,tests,train,test,r,asIs,num0,num1,num2,eps,diff)
+  r = 20
+  for file,d in l.datas(arg) do
+      Y= function(r) return d:ydist(r) end
+      asIs = l.adds(NUM:new(), l.map(d.rows, Y))
+      for _,n in pairs{15,30,50,80,120} do
+        the.Stop=n
+        trains,tests = {},{}
+        for i=1, r do
+          train,test = d:acquire() 
+          l.push(trains,Y(train)) 
+          l.push(tests, Y(test)) end
+        num0=l.adds(NUM:new(), asIs)
+        num1=l.adds(NUM:new(), trains)
+        num2=l.adds(NUM:new(), tests)
+        eps = num0.sd *.35
+        diff=num1.mu - num2.mu
+        l.oo{file=file:gsub(".*/",""), n=the.Stop, eps=eps,mu0=asIs.mu, mu1=num1.mu, mu2=num2.mu,
+             delta = l.same(train,tests) and 0 or abs(diff) < eps and 0 or diff} end end end 
+      
+----------------- ----------------- ----------------- ----------------- -----------------  
+-- ## Start-up
+
 -- `l.tests(dict[str,callable], list[str])`   
 -- For the tests stored in `eg` run those names in `tests`.
 -- Before each one, reset the random number seed to its default.
@@ -423,121 +530,18 @@ function l.tests(eg,tests,      FN,_)
          bad = ok==false or msg==false
          print((bad and "❌" or "✅") .." on "..x)
          return bad and 1 or 0 end
-  os.exit(sum(tests, FN)) end
-
----------------- ----------------- ----------------- ----------------- -----------------  
--- ## EG
--- Store start-up actions.
-
-local EG={}
-
--- All the tests we might run in an order simplest to more complex.
-function EG.all() 
-  return tests(EG, {"any","sum","split","sort","num","sym","csv"}) end
-
--- Random selection.
-function EG.any(  a)
-  a = {10,20,30,40,50,60}
-  oo(map({any(a), many(a,3),shuffle(a),keysort(a,function(x) return -x end)},
-     o)) end 
-
--- Summation.
-function EG.sum()
-  assert(210 == sum{10,20,30,40,50,60}) end
-
--- Split a list.
-function EG.split(    a,b,c)
-  a={10,20,30,40,50,60}
-  b,c = split(a,3)
-  print(o(b), o(c)) end
-
--- Sort a list.
-function EG.sort(    t)
-  t={1,2,3,4,5,6,7}
-  t=sort(t, function(x,y) return  x > y end)
-  oo{10,4,5}
-  oo(t) end
-
--- Example of NUMs.
-function EG.num(    n) 
-  n = NUM:new()
-  for _ = 1,1000 do n:add( normal(10,2) ) end
-  assert(10-n.mu < 0.1 and 2-n.sd < 0.03) end
-
--- Example of SYMs.
-function EG.sym(    s) 
-  s = adds(SYM:new(), {"a","a","a","a","b","b","c"})
-  print(s.mode, o(s.has)) end
-
--- Show some rows from a csv file.
-function EG.csv(   d, n)
-  print(the.train)
-  n=0
-  for row in csv(the.train) do n=n+1 ; if n==1 or n % 90==0 then oo(row) end end end
-
--- Compare results from different statistical tests.
-function EG.stats(   r,t,u,d)
-  d,r= 1,100
-  while d< 1.2 do
-    t={}; for i=1,r do t[1+#t] = normal(10,2)^2 end 
-    u={}; for i,x in pairs(t) do u[i] = x*d end
-    d=d*1.01
-    print(fmt("%.3f    %s %s",d, cliffs(t,u) and "y" or ".", bootstrap(t,u) and "y" or "."))
-  end end
-
--- Fill a DATA from a csv file.
-function EG.data(   d)
-  d = DATA:new():read(the.train) 
-  assert(3184 == (sum(d.rows,function(r) return #r end))) end
-
--- Check the likelihood calculations.
-function EG.like(   d,n)
-  n,d = 0,DATA:new():read(the.train) 
-  for _,row in pairs(d.rows) do 
-    n=n+1 
-    if n==1 or n % 15==0 then 
-      print(fmt("%.3f %s",d:loglike(row,#d.rows,2), o(row))) end end  end
-
--- One experiment, where we do a guided search of some data.
-function EG.acquire(     d, train,test)
-  d = DATA:new():read(the.train) 
-  train,test = d:acquire() 
-  print(d:ydist(train), d:ydist(test)) end
-
--- Another experiment, for multiple command line csv files, for guided search of some data.
-function EG.acquirea(     d,y,trains,tests,train,test,r,asIs,num0,num1,num2,eps,diff)
-  r = 20
-  for file,d in datas(arg) do
-      Y= function(r) return d:ydist(r) end
-      asIs = adds(NUM:new(), map(d.rows, Y))
-      for _,n in pairs{15,30,50,80,120} do
-        the.Stop=n
-        trains,tests = {},{}
-        for i=1, r do
-          train,test = d:acquire() 
-          push(trains,Y(train)) 
-          push(tests, Y(test)) end
-        num0=adds(NUM:new(), asIs)
-        num1=adds(NUM:new(), trains)
-        num2=adds(NUM:new(), tests)
-        eps = num0.sd *.35
-        diff=num1.mu - num2.mu
-        oo{file=file:gsub(".*/",""), n=the.Stop, eps=eps,mu0=asIs.mu, mu1=num1.mu, mu2=num2.mu,
-           delta = same(train,tests) and 0 or abs(diff) < eps and 0 or diff} end end end 
-      
------------------ ----------------- ----------------- ----------------- -----------------  
--- ## Start-up
+  os.exit(l.sum(tests, FN)) end
 
 -- Build the settings from the help string.
-help:gsub("%s+-%S%s(%S+)[^=]+=%s+(%S+)%s*\n", function(k,v) the[k]= coerce(v) end)
+help:gsub("%s+-%S%s(%S+)[^=]+=%s+(%S+)%s*\n", function(k,v) the[k]= l.coerce(v) end)
 
 -- If this is the main controlling file, the read the command line and explore the start-up
 -- examples.
-if o(arg):find"kah.lua" then
-   the = cli(the)
-   if the.help then os.exit(print(help)) end
-   math.randomseed(the.rseed or 1)
-   map(arg, function(s) if EG[s:sub(3)] then EG[s:sub(3)]() end end) end
+if l.o(arg):find"kah.lua" then
+  the = l.cli(the)
+  if the.help then os.exit(print(help)) end
+  math.randomseed(the.rseed or 1)
+  l.map(arg, function(s) if EG[s:sub(3)] then EG[s:sub(3)]() end end) end
 
 -- Return code which other people can use.
-return {SYM=SYM, NUM=NUM, COLS=COLS, DATA=DATA, the=the, help=help}
+return {SYM=SYM, NUM=NUM, COLS=COLS, DATA=DATA, the=the, help=help, lib=l}

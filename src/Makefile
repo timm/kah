@@ -20,6 +20,11 @@ push: ## commit to main
 	- echo -en "$(LOUD)Why this push? $(SOFT)" ;  read x ; git commit -am "$$x" ;  git push
 	- git status
 
+lines:
+	sed '/^-- /d' kah.lua > lines.lua 
+	$(MAKE) ~/tmp/lines.pdf
+	rm lines.lua
+
 ../docs/%.html : %.lua
 	pycco -d ../docs  $^
 	echo "p { text-align: right;  }  " >> ../docs/pycco.css
