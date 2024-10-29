@@ -104,14 +104,16 @@ function NUM:like(x,_,      v,tmp)
 -- Map `x` to the range 0..1 for `lo`..`hi`.
 function NUM:norm(x)
   return x=="?" and x or (x - self.lo)/(self.hi - self.lo) end
-       
--- `:delta(num) -> num`   
+
+-- `:delta(num) -> num`
 -- Reports the adjusted mean difference between two NUMs.
 function NUM:delta(other)
   return abs(self.mu - other.mu) / ((1E-32 + self.sd^2/self.n + other.sd^2/other.n)^.5) end
- 
+
+-- `:delta(num) -> num`   
+-- Reports weighted sum of the standard deviation of two NUMs
 function NUM:pooledSd(other)
-  return sqrt(((self.n-1)*self.sd^2 + (other.n-1)*other.sd^2) / (self.n + other.n-2)) end
+  return sqrt(((self.n-1)*self.sd^2 + (other.n-1)*other.sd^2)/(self.n+other.n-2)) end 
 
 ----------------- ----------------- ----------------- ----------------- -----------------  
 -- ## COLS
@@ -214,6 +216,19 @@ function DATA:acquire()
 ----------------- ----------------- ----------------- ----------------- -----------------  
 -- ## Stats
 
+function SOME:new(txt,sample,beats)
+  return l.new(SOME, {txt=txt, all={}, beats=beats, sample=(sample or 0), num=NUM:new()}) end
+
+function SOME:add(x)
+  l.push(self.all, x)
+  self.num:add(x) end
+
+function SOME:delta(other, eps,      d)
+  d = self.num.mu - self.other.mu
+  if abs(d) < (eps or 0) * self.num:pooledSd(other.num) then return 0 end
+  if l.cliffs(self.all, other.all) and l.bootstrap(self.all, other.all) then return 0 end
+  return d end
+
 -- `l.cliffs(list[num], list[num]) --> bool`    
 -- Two lists are the same if items from one  fall  towards the middle of the other list.
 function l.cliffs(xs,ys)
@@ -242,19 +257,6 @@ function l.bootstrap(y0,z0)
   for i=1, b do 
     if N(l.many(yhat)):delta(N((l.many(zhat)))) > delta0 then n = n + 1 end end
   return n / b >= the.conf end
-
-function SOME:new(txt,sample,beats)
-  return l.new(SOME, {txt=txt, all={}, beats=beats, sample=(sample or 0), num=NUM:new()}) end
-
-function SOME:add(x)
-  l.push(self.all, x)
-  self.num:add(x) end
-
-function SOME:delta(other, eps, base,      sd)
-  sd = self.num:pooled(other.num) 
-  if abs(self.mu - other.mu) < sd *(eps or 0) then return 0 end
-  if l.cliffs(self.all,other.all) and l.bootstrap(self.all, other.all) then return 0 end
-  return (self.mu - other.mu)/(base or 1) end
 
 ----------------- ----------------- ----------------- ----------------- ------------------
 -- ## Utilities
