@@ -17,7 +17,7 @@
 --     - Some classes;
 --     - A library of start-up actions called `EG`;
 --     - The actual start-up actions.
-local the,help = {},[[
+local l,the,big,help = {},{},1E32,[[
 
 kah.lua : how to change your mind (using TPE + Bayes classifier)
 (c) 2024 Tim Menzies (timm@ieee.org). MIT license.
@@ -43,190 +43,19 @@ OPTIONS:
   -t train      data                     = ../test/auto93.csv 
 ]]
 
-local fmt, pop           = string.format, table.remove
+local SYM, NUM, DATA, COLS, SOME = {}, {}, {}, {}, {}
+
 local abs, cos, exp, log = math.abs, math.cos, math.exp, math.log
 local max, min, pi, sqrt = math.max, math.min, math.pi, math.sqrt
 local R                  = math.random
-
-local SYM, NUM, DATA, COLS, SOME = {}, {}, {}, {}, {}
-local big = 1E32
       
------------------ ----------------- ----------------- ----------------- ------------------
--- ## Utilities
--- In Lua, things have to be defined before they are used. So utilities
--- come before classes.
--- ###  Lists
-
--- `push(list,atom) --> atom`   
--- Add `atom` to end of `list`.
-local function push(t,x) t[1+#t] = x; return x end
-
--- `split(list, n:int=#list) -> list,list`     
--- Return the first `n` items in one list, then the other items in a second list.
-local function split(t,n)
-  local u,v = {},{}
-  for j,x in pairs(t) do push(j <= n and u or v,x) end
-  return u,v end
-
--- ### Random 
-
--- `any(list) --> Any`  
--- Return any one item from `list`.
-local function any(t)    
-  return t[R(#t)] end
-
--- `many(list, n=#list) --> list`  
--- Return `n` items from `list`.
-local function many(t,n,  u) 
-  u={}; for i=1,(n or #t) do u[i] = any(t) end; return u end
-
--- `normal(mu:num=0, sd:num) --> num`   
--- Return a value from a normal distribution.
-local function normal(mu,sd) 
-   return (mu or 0)+(sd or 1)*sqrt(-2*log(R()))*cos(2*pi*R()) end
-
--- ### Sorting
-
--- `lt(atom) --> function`    
--- Return a function to sort ascending on key `x`.
-local function lt(x) 
-  return function(a,b) return a[x] < b[x] end end
-
---  `shuffle(list) --> list`   
--- Randomly rearrange items in `list`.
-local function shuffle(t,    j)
-  for i = #t, 2, -1 do j = R(i); t[i], t[j] = t[j], t[i] end
-  return t end
-
--- `sort(list, callable=function(x) return x end) --> list`  
--- Return `list`, sorted by `fn`.
-local function sort(t,fn) 
-  table.sort(t,fn); return t end
-
--- ### Mapping
-
--- `adds(Any, list) --> Any`    
--- Add all items in `list` to `it`.
-local function adds(it,t)
-  for _,x in pairs(t or {}) do it:add(x) end; return it end
-
--- `kap(list, callable) --> list`   
--- `kap` calls `fn` with  key and value.
-local function kap(t,fn,    u) --> list
-  u={}; for k,v in pairs(t) do u[1+#u]=fn(k,v)  end; return u end
-
--- `map(list, callable) --> list`     
--- `kap` calls `fn` with  value.
-local function map(t,fn,     u) --> list
-  u={}; for _,v in pairs(t) do u[1+#u] = fn(v)  end; return u end
-
--- `sum(list,callable) --> num`   
--- Return sum of items in `list`, filtered by `fn`.
-local function sum(t,fn,     n)
-  n=0; for _,x in pairs(t) do n=n+(fn and fn(x) or x) end; return n end
-
--- `keysort(list, callable) --> list`    
--- The Schwartzian transform is a computer programming technique
--- that uses the decorate-sort-undecorate idiom to improve the efficiency
--- of sorting a list of items.
--- Recommended over `sort` when `callable` is slow to compute.
-local function keysort(t,fn,     DECORATE,UNDECORATE)
-  DECORATE   = function(x) return {fn(x),x} end
-  UNDECORATE = function(x) return x[2] end
-  return map(sort(map(t,DECORATE),lt(1)), UNDECORATE) end
-
--- ### String to thing
-
--- `coerce(str) -> bool | int | float | str`  
--- Convert  a string into some atom.
-local function coerce(s,     F,TRIM) 
-  TRIM= function(s) return s:match"^%s*(.-)%s*$" end
-  F   = function(s) return s=="true" and true or s ~= "false" and s end
-  return math.tointeger(s) or tonumber(s) or F(TRIM(s)) end
-
--- `csv(str) --> Iterator --> list`   
--- Returns an iterator for reading lines in a csv file.
-local function csv(file,     src)
-  if file and file ~="-" then src=io.input(file) end
-  return function(     s,t)
-    s = io.read()
-    if   not s 
-    then if src then io.close(src) end 
-    else t={}; for s1 in s:gmatch"([^,]+)" do push(t,coerce(s1)) end; return t end end end
-
--- `datas(list[str]) --> Iterator --> list`  
--- For any string ending in "csv", return that file as a DATA.
-local function datas(t,      i)
-  i=0
-  return function()
-    while i<#t do
-      i = i+1
-      if t[i]:find"csv" then
-        return t[i], DATA:new():read(t[i]) end end end end
-
--- ### Thing to string
-
--- `o(atom | dict | list) --> str`   
--- Generate a string from any atom or nested structure. Skip over
--- private stuff (i.e. anything whose key starts with "_").
-local function o(x,     F,G,GO) --> str
-  F  = function() return #x>0 and map(x,o) or sort(kap(x,G)) end
-  G  = function(k,v) if GO(k) then return fmt(":%s %s",k,o(x[k])) end end
-  GO = function(k,v) return not o(k):find"^_" end
-  return type(x)=="number" and fmt("%g",x) or  
-         type(x)~="table"  and tostring(x) or 
-         "{" .. table.concat(F()," ") .. "}" end 
-
--- `oo(atom | dict | list) --> nil`     
--- Prints the string generated by `o`.
-local function oo(x) 
-  print(o(x)) end
-
--- ### Polymorphism
-
--- `new(list, dict) --> dict`    
--- Return a dictionary that knows where to find its methods.
-local function new(klass, obj)
-  klass.__index    = klass
-  klass.__tostring = klass.__tostring or o
-  return setmetatable(obj, klass) end
-
--- ### Start-up
-
--- `cli(dict) --> dict`        
--- Update slot xxx in `dict` if there is a command line flag `-x`.
--- For any slot `-x`  with an existing boolean value, then the flag `-x`
--- negates the default.
-local function cli(t)
-  for k,v in pairs(t) do
-    v = tostring(v)
-    for n,x in ipairs(arg) do
-      if x=="-"..(k:sub(1,1)) then
-        v= v=="false" and "true" or v=="true" and "false" or arg[n+1] end end 
-    t[k] = coerce(v) end 
-  return t end
-
--- `tests(dict[str,callable], list[str])`   
--- For the tests stored in `eg` run those names in `tests`.
--- Before each one, reset the random number seed to its default.
--- After each one that crashes or returns `false`, add one to `fails` counter.
--- Return the sum of the failures to the operator system.
-local function tests(eg,tests,      FN,_)
-  FN = function(x,     ok,msg,bad) 
-         math.randomseed(the.rseed)
-         ok,msg = xpcall(eg[x], debug.traceback, _)
-         bad = ok==false or msg==false
-         print((bad and "❌" or "✅") .." on "..x)
-         return bad and 1 or 0 end
-  os.exit(sum(tests, FN)) end
-
 ---------------- ----------------- ----------------- ----------------- -----------------
 -- ## SYM
 -- SYMs  summarize a stream of atoms seen in column `at`.
 
 -- `:new(str, int) --> SYM`
 function SYM:new(txt,at) 
-  return new(SYM, {at=at, txt=txt, n=0, has={}, most=0, mode=nil}) end
+  return l.new(SYM, {at=at, txt=txt, n=0, has={}, most=0, mode=nil}) end
 
 -- `:add(x) --> nil`      
 -- Add an atom to a SYM.
@@ -248,7 +77,7 @@ function SYM:like(x,prior)
 -- `:new(str, int) --> NUM`  
 -- If a NUM's name end in `-` then its goal is to be minimized (so we set that to `0`). 
 function NUM:new(txt, at) 
-  return new(NUM, {at=at, txt=txt, n=0, mu=0, m2=0, sd=0, lo=big, hi= -big,
+  return l.new(NUM, {at=at, txt=txt, n=0, mu=0, m2=0, sd=0, lo=big, hi= -big,
                    goal = (txt or ""):find"-$" and 0 or 1}) end
 
 -- `:add(num) --> nil`  
@@ -297,10 +126,10 @@ function NUM:pooledSd(other)
 function COLS:new(names)
   local all,x,y = {},{},{}
   for at,txt in pairs(names) do 
-    push(all, (txt:find"^[A-Z]" and NUM or SYM):new(txt,at))
+    l.push(all, (txt:find"^[A-Z]" and NUM or SYM):new(txt,at))
     if not txt:find"X$" then
-      push(txt:find"[!+-]$" and y or x, all[#all]) end end
-  return new(COLS, {names=names, all=all, x=x, y=y}) end
+      l.push(txt:find"[!+-]$" and y or x, all[#all]) end end
+  return l.new(COLS, {names=names, all=all, x=x, y=y}) end
 
 -- _:add(list) --> list_    
 -- Update the column summaries from `row`.
@@ -314,12 +143,12 @@ function COLS:add(row)
 
 -- `:new() --> DATA`    
 function DATA:new()
-  return new(DATA, {cols=nil, rows={}})  end
+  return l.new(DATA, {cols=nil, rows={}})  end
 
 -- `:read(str) --> DATA`   
 -- Fill in the `rows` of a DATA from a csv `file`.
 function DATA:read(file)
-  for row in csv(file) do self:add(row) end; return self end
+  for row in l.csv(file) do self:add(row) end; return self end
 
 -- `:adds(list[list]) --> DATA`   
 -- Fill in the `rows` of a DATA from a list or rows.
@@ -329,7 +158,7 @@ function DATA:adds(t)
 -- `:add(list) --> DATA`   
 -- Add `row` to a DATA. If this is the first row then use it to initialize the columns.
 function DATA:add(row) 
-  if self.cols then push(self.rows,  self.cols:add(row)) else self.cols=COLS:new(row) end 
+  if self.cols then l.push(self.rows,  self.cols:add(row)) else self.cols=COLS:new(row) end 
   return self end 
 
 -- `:clone(list[list]={}) --> DATA`   
@@ -345,13 +174,13 @@ function DATA:loglike(row, nall, nh,          prior,F,G)
   prior = (#self.rows + the.k) / (nall + the.k*nh)
   F     = function(x) return L( x:like(row[x.at], prior) ) end
   L     = function(n) return n>0 and log(n) or 0 end
-  return L(prior) + sum(self.cols.x, F) end
+  return L(prior) + l.sum(self.cols.x, F) end
 
 -- `:ydist(list) --> 0..1`   
 -- Return the distance from a row's goals to best values for each goal.
 function DATA:ydist(row, D)
   D = function(y) return (abs(y:norm(row[y.at]) - y.goal))^the.p end
-  return (sum(self.cols.y,D) /#self.cols.y)^(1/the.p) end
+  return (l.sum(self.cols.y,D) /#self.cols.y)^(1/the.p) end
 
 -- `DATA:active() --> list,list`  
 --      
@@ -370,18 +199,18 @@ function DATA:acquire()
   B  = function(r) return best:loglike(r, #done, 2) end
   R  = function(r) return rest:loglike(r, #done, 2) end
   BR = function(r) return B(r) - R(r) end
-  test,train = split(shuffle(self.rows), the.Holdout * #self.rows)
-  done,todo  = split(train, the.start)              --- [1]
+  test,train = l.split(l.shuffle(self.rows), the.Holdout * #self.rows)
+  done,todo  = l.split(train, the.start)              --- [1]
   while true do
-    done = keysort(done,Y)
+    done = l.keysort(done,Y)
     if #done > the.Stop or #todo < 5 then break end --- [6]
-    best,rest = split(done, sqrt(#done))            --- [2]
+    best,rest = l.split(done, sqrt(#done))            --- [2]
     best,rest = self:clone(best), self:clone(rest)  --- [3]
-    todo = keysort(todo,BR)                         --- [4]
+    todo = l.keysort(todo,BR)                         --- [4]
     for _=1,2 do                                    --- [5]
-      push(done, pop(todo)); 
-      push(done, pop(todo,1)) end end
-  return done[1], keysort(test,BR)[#test] end       --- [7]
+      l.push(done, l.pop(todo)); 
+      l.push(done, l.pop(todo,1)) end end
+  return done[1], l.keysort(test,BR)[#test] end       --- [7]
 
 ----------------- ----------------- ----------------- ----------------- -----------------  
 -- ## Stats
@@ -406,21 +235,20 @@ local function cliffs(xs,ys)
 -- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
 local function bootstrap(y0,z0)
   local x,y,z,delta0,yhat,zhat,n,this,that,b
-  z,y,x  = adds(NUM:new(),z0), adds(NUM:new(),y0), adds(adds(NUM:new(),y0),z0)
-  delta0 = y:delta(z)
-  yhat   = map(y0, function(y1) return y1 - y.mu + x.mu end)
-  zhat   = map(z0, function(z1) return z1 - z.mu + x.mu end)
-  n,b    = 0, the.Bootstraps
-  for i=1, b do
-    this, that = adds(NUM:new(),many(yhat)), adds(NUM:new(),many(zhat))
-    n = n + (this:delta(that) > delta0 and 1 or 0) end
+  local N= function(t) return l.adds(NUM:new(),t) end
+  z,y,x  = N(z0), N(y0), l.adds(N(y0),z0)
+  yhat   = l.map(y0, function(y1) return y1 - y.mu + x.mu end)
+  zhat   = l.map(z0, function(z1) return z1 - z.mu + x.mu end)
+  n,b,delta0 = 0, the.Bootstraps, y:delta(z)
+  for i=1, b do 
+    if N(l.many(yhat)):delta(N((l.many(zhat)))) > delta0 then n = n + 1 end end
   return n / b >= the.conf end
 
 function SOME:new(txt,sample,beats)
-  return new(SOME, {txt=txt, all={}, beats=beats, sample=(sample or 0), num=NUM:new()}) end
+  return l.new(SOME, {txt=txt, all={}, beats=beats, sample=(sample or 0), num=NUM:new()}) end
 
 function SOME:add(x)
-  push(self.all, x)
+  l.push(self.all, x)
   self.num:add(x) end
 
 function SOME:delta(other, eps, base,      sd)
@@ -428,6 +256,175 @@ function SOME:delta(other, eps, base,      sd)
   if abs(self.mu - other.mu) < sd *(eps or 0) then return 0 end
   if cliffs(self.all,other.all) and bootstrap(self.all, other.all) then return 0 end
   return (self.mu - other.mu)/(base or 1) end
+
+----------------- ----------------- ----------------- ----------------- ------------------
+-- ## Utilities
+-- In Lua, things have to be defined before they are used. So utilities
+-- come before classes.
+-- ###  Lists
+
+-- `l.push(list,atom) --> atom`   
+-- Add `atom` to end of `list`.
+function l.push(t,x) t[1+#t] = x; return x end
+
+-- `l.split(list, n:int=#list) -> list,list`     
+-- Return the first `n` items in one list, then the other items in a second list.
+function l.split(t,n)
+  local u,v = {},{}
+  for j,x in pairs(t) do push(j <= n and u or v,x) end
+  return u,v end
+
+-- ### Random 
+
+-- `l.any(list) --> Any`  
+-- Return any one item from `list`.
+function l.any(t)    
+  return t[R(#t)] end
+
+-- `l.many(list, n=#list) --> list`  
+-- Return `n` items from `list`.
+function l.many(t,n,  u) 
+  u={}; for i=1,(n or #t) do u[i] = l.any(t) end; return u end
+
+-- `l.normal(mu:num=0, sd:num) --> num`   
+-- Return a value from a normal distribution.
+function l.normal(mu,sd) 
+   return (mu or 0)+(sd or 1)*sqrt(-2*log(R()))*cos(2*pi*R()) end
+
+-- ### Sorting
+
+-- `l.lt(atom) --> function`    
+-- Return a function to sort ascending on key `x`.
+function l.lt(x) 
+  return function(a,b) return a[x] < b[x] end end
+
+--  `l.shuffle(list) --> list`   
+-- Randomly rearrange items in `list`.
+function l.shuffle(t,    j)
+  for i = #t, 2, -1 do j = R(i); t[i], t[j] = t[j], t[i] end
+  return t end
+
+-- `l.sort(list, callable=function(x) return x end) --> list`  
+-- Return `list`, sorted by `fn`.
+function l.sort(t,fn) 
+  table.sort(t,fn); return t end
+
+-- ### Mapping
+
+-- `l.adds(Any, list) --> Any`    
+-- Add all items in `list` to `it`.
+function l.adds(it,t)
+  for _,x in pairs(t or {}) do it:add(x) end; return it end
+
+-- `l.kap(list, callable) --> list`   
+-- `kap` calls `fn` with  key and value.
+function l.kap(t,fn,    u) --> list
+  u={}; for k,v in pairs(t) do u[1+#u]=fn(k,v)  end; return u end
+
+-- `l.kap(list, callable) --> list`     
+-- `l.map` calls `fn` with one value.
+function l.map(t,fn,     u) --> list
+  u={}; for _,v in pairs(t) do u[1+#u] = fn(v)  end; return u end
+
+-- `l.sum(list,callable) --> num`   
+-- Return sum of items in `list`, filtered by `fn`.
+function l.sum(t,fn,     n)
+  n=0; for _,x in pairs(t) do n=n+(fn and fn(x) or x) end; return n end
+
+-- `l.keysort(list, callable) --> list`    
+-- The Schwartzian transform is a computer programming technique
+-- that uses the decorate-sort-undecorate idiom to improve the efficiency
+-- of sorting a list of items.
+-- Recommended over `sort` when `callable` is slow to compute.
+function l.keysort(t,fn,     DECORATE,UNDECORATE)
+  DECORATE   = function(x) return {fn(x),x} end
+  UNDECORATE = function(x) return x[2] end
+  return l.map(l.sort(l.map(t,DECORATE),l.lt(1)), UNDECORATE) end
+
+-- ### String to thing
+
+-- `l.coerce(str) -> bool | int | float | str`  
+-- Convert  a string into some atom.
+function l.coerce(s,     F,TRIM) 
+  TRIM= function(s) return s:match"^%s*(.-)%s*$" end
+  F   = function(s) return s=="true" and true or s ~= "false" and s end
+  return math.tointeger(s) or tonumber(s) or F(TRIM(s)) end
+
+-- `l.csv(str) --> Iterator --> list`   
+-- Returns an iterator for reading lines in a csv file.
+function l.csv(file,     src)
+  if file and file ~="-" then src=io.input(file) end
+  return function(     s,t)
+    s = io.read()
+    if   not s 
+    then if src then io.close(src) end 
+    else t={}; for s1 in s:gmatch"([^,]+)" do t[1+#t]=l.coerce(s1)end; return t end end end
+
+-- `l.datas(list[str]) --> Iterator --> list`  
+-- For any string ending in "csv", return that file as a DATA.
+function l.datas(t,      i)
+  i=0
+  return function()
+    while i<#t do
+      i = i+1
+      if t[i]:find"csv" then
+        return t[i], DATA:new():read(t[i]) end end end end
+
+-- ### Thing to string
+
+-- `l.o(atom | dict | list) --> str`   
+-- Generate a string from any atom or nested structure. Skip over
+-- private stuff (i.e. anything whose key starts with "_").
+function l.o(x,     F,G,GO) --> str
+  F  = function() return #x>0 and l.map(x,o) or l.sort(l.kap(x,G)) end
+  G  = function(k,v) if GO(k) then return l.fmt(":%s %s",k,l.o(x[k])) end end
+  GO = function(k,v) return not l.o(k):find"^_" end
+  return type(x)=="number" and l.fmt("%g",x) or  
+         type(x)~="table"  and tostring(x) or 
+         "{" .. table.concat(F()," ") .. "}" end 
+
+-- `l.oo(atom | dict | list) --> nil`     
+-- Prints the string generated by `o`.
+function l.oo(x) print(l.o(x)) end
+
+-- ### Polymorphism
+
+-- `l.new(list, dict) --> dict`    
+-- Return a dictionary that knows where to find its methods.
+function l.new(klass, obj)
+  klass.__index    = klass
+  klass.__tostring = klass.__tostring or o
+  return setmetatable(obj, klass) end
+
+-- ### Start-up
+
+-- `l.cli(dict) --> dict`        
+-- Update slot xxx in `dict` if there is a command line flag `-x`.
+-- For any slot `-x`  with an existing boolean value, then the flag `-x`
+-- negates the default.
+function l.cli(t)
+  for k,v in pairs(t) do
+    v = tostring(v)
+    for n,x in ipairs(arg) do
+      if x=="-"..(k:sub(1,1)) then
+        v= v=="false" and "true" or v=="true" and "false" or arg[n+1] end end 
+    t[k] = l.coerce(v) end 
+  return t end
+
+-- `l.tests(dict[str,callable], list[str])`   
+-- For the tests stored in `eg` run those names in `tests`.
+-- Before each one, reset the random number seed to its default.
+-- After each one that crashes or returns `false`, add one to `fails` counter.
+-- Return the sum of the failures to the operator system.
+function l.tests(eg,tests,      FN,_)
+  FN = function(x,     ok,msg,bad) 
+         math.randomseed(the.rseed)
+         ok,msg = xpcall(eg[x], debug.traceback, _)
+         bad = ok==false or msg==false
+         print((bad and "❌" or "✅") .." on "..x)
+         return bad and 1 or 0 end
+  os.exit(sum(tests, FN)) end
+
 ---------------- ----------------- ----------------- ----------------- -----------------  
 -- ## EG
 -- Store start-up actions.
