@@ -39,8 +39,8 @@ OPTIONS:
   -r rseed      random seed              = 1234567891
   -s start      init number of samples   = 4
   -S Stop       max number of labellings = 30
-  -H Holdout    testing hold our ratio   = .33
   -t train      data                     = ../test/auto93.csv 
+  -T Trainings  max size train set       = .33
 ]]
 
 local SYM, NUM, DATA, COLS, SOME = {}, {}, {}, {}, {}   
@@ -49,7 +49,9 @@ local abs, cos, exp, log    = math.abs, math.cos, math.exp, math.log
 local max, min, pi, R, sqrt = math.max, math.min, math.pi, math.random, math.sqrt
       
 ---------------- ----------------- ----------------- ----------------- -----------------
--- ## SYM
+-- ## Data Model
+
+-- ### SYM
 -- SYMs  summarize a stream of atoms seen in column `at`.
 
 -- `:new(str, int) --> SYM`
@@ -64,13 +66,7 @@ function SYM:add(x)
     self.has[x] = 1 + (self.has[x] or 0) 
     if self.has[x] > self.most then self.most, self.mode = self.has[x], x end end end
 
---  `:like(num, num) --> num`   
--- Report how much `x` might belong to a SYMbolic distribution.
-function SYM:like(x,prior)
-  return  ((self.has[x] or 0) + the.m*prior) / (self.n + the.m)  end
-
------------------ ----------------- ----------------- ----------------- -----------------  
--- ## NUM
+-- ### NUM
 -- NUMs summarize a stream of numbers seen in column `at`.
 
 -- `:new(str, int) --> NUM`  
@@ -92,31 +88,13 @@ function NUM:add(x)
     self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^.5
     if x > self.hi then self.hi = x end
     if x < self.lo then self.lo = x end end end
-
--- `:like(num) --> num`  
--- Report how much `x` might belong to a NUMbolic distribution.
-function NUM:like(x,_,      v,tmp)
-  v = self.sd^2 + 1/big
-  tmp = exp(-1*(x - self.mu)^2/(2*v)) / (2*pi*v) ^ 0.5
-  return max(0,min(1, tmp + 1/big)) end
  
 -- `:norm(num) --> 0..1`  
 -- Map `x` to the range 0..1 for `lo`..`hi`.
 function NUM:norm(x)
   return x=="?" and x or (x - self.lo)/(self.hi - self.lo) end
 
--- `:delta(num) -> num`
--- Reports the adjusted mean difference between two NUMs.
-function NUM:delta(other)
-  return abs(self.mu - other.mu) / ((1E-32 + self.sd^2/self.n + other.sd^2/other.n)^.5) end
-
--- `:delta(num) -> num`   
--- Reports weighted sum of the standard deviation of two NUMs
-function NUM:pooledSd(other)
-  return sqrt(((self.n-1)*self.sd^2 + (other.n-1)*other.sd^2)/(self.n+other.n-2)) end 
-
------------------ ----------------- ----------------- ----------------- -----------------  
--- ## COLS
+-- ### COLS
 -- COLS are factories for generating NUMs or SYMs from a list of column names.
 
 -- `:new(list[str]) --> COLS`   
@@ -138,8 +116,7 @@ function COLS:add(row)
   for _,col in pairs(self.all) do col:add(row[col.at]) end 
   return row end
 
------------------ ----------------- ----------------- ----------------- -----------------  
--- ## DATA
+-- ### DATA
 -- DATAs store `rows`, summarizes into `col`umns of NUMs or SYMS.
 
 -- `:new() --> DATA`    
@@ -154,7 +131,7 @@ function DATA:read(file)
 -- `:adds(list[list]) --> DATA`   
 -- Fill in the `rows` of a DATA from a list or rows.
 function DATA:adds(t)
-  for row in pairs(t or {}) do self:add(row) end; return self end
+  for _,row in pairs(t or {}) do self:add(row) end; return self end
 
 -- `:add(list) --> DATA`   
 -- Add `row` to a DATA. If this is the first row then use it to initialize the columns.
@@ -164,9 +141,24 @@ function DATA:add(row)
 
 -- `:clone(list[list]={}) --> DATA`   
 -- Return a new DATA with same structure as self. If `rows` is supplied, that add that.
-function DATA:clone(rows) 
+function DATA:clone(rows,     d) 
   return DATA:new():add(self.cols.names):adds(rows) end
    
+--------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
+-- ## Bayes
+
+--  `:like(num, num) --> num`   
+-- Report how much `x` might belong to a SYMbolic distribution.
+function SYM:like(x,prior)
+  return  ((self.has[x] or 0) + the.m*prior) / (self.n + the.m)  end
+
+-- `:like(num) --> num`  
+-- Report how much `x` might belong to a NUMbolic distribution.
+function NUM:like(x,_,      v,tmp)
+  v = self.sd^2 + 1/big
+  tmp = exp(-1*(x - self.mu)^2/(2*v)) / (2*pi*v) ^ 0.5
+  return max(0,min(1, tmp + 1/big)) end
+
 -- `:loglike(list[list], int, int) --> num`   
 -- Report the log likelohood that `row` belongs to self (by multiplying the prior
 -- by the product of the liklihood of the evidence in `row`).  `nh` is the number of
@@ -195,73 +187,28 @@ function DATA:ydist(row, D)
 -- 7. ... use the classifier to sort the remaining
 --    unlabelled examples. Repor the best in that test set.
 function DATA:acquire()
-  local Y,B,R,BR,test,train,todo,done,best,rest
+  local Y,B,R,BR,test,train,todo,done,best,rest,n,_
   Y  = function(r) return self:ydist(r) end
   B  = function(r) return best:loglike(r, #done, 2) end
   R  = function(r) return rest:loglike(r, #done, 2) end
   BR = function(r) return B(r) - R(r) end
-  test,train = l.split(l.shuffle(self.rows), the.Holdout * #self.rows)
+  n  = min(500, the.Trainings * #self.rows)
+  train,test = l.split(l.shuffle(self.rows), n)
+  test, _    = l.split(test, min(500,#test))
   done,todo  = l.split(train, the.start)            --- [1]
   while true do
     done = l.keysort(done,Y)
     if #done > the.Stop or #todo < 5 then break end --- [6]
     best,rest = l.split(done, sqrt(#done))          --- [2]
-    best,rest = self:clone(best), self:clone(rest)  --- [3]
+    best, rest = self:clone(best), self:clone(rest)  --- [3]
     todo = l.keysort(todo,BR)                       --- [4]
     for _=1,2 do                                    --- [5]
-      l.push(done, l.pop(todo)); 
-      l.push(done, l.pop(todo,1)) end end
+      l.push(done, table.remove(todo)); 
+      l.push(done, table.remove(todo,1)) end end
   return done[1], l.keysort(test,BR)[#test] end     --- [7]
 
------------------ ----------------- ----------------- ----------------- -----------------  
--- ## Stats
-
-function SOME:new(txt,sample,beats)
-  return l.new(SOME, {txt=txt, all={}, beats=beats, sample=(sample or 0), num=NUM:new()}) end
-
-function SOME:add(x)
-  l.push(self.all, x)
-  self.num:add(x) end
-
-function SOME:delta(other, eps,      d)
-  d = self.num.mu - self.other.mu
-  if abs(d) < (eps or 0) * self.num:pooledSd(other.num) then return 0 end
-  if l.cliffs(self.all, other.all) and l.bootstrap(self.all, other.all) then return 0 end
-  return d end
-
--- `l.cliffs(list[num], list[num]) --> bool`    
--- Two lists are the same if items from one  fall  towards the middle of the other list.
-function l.cliffs(xs,ys)
-  local lt,gt,n = 0,0,0
-  for _,x in pairs(xs) do
-     for _,y in pairs(ys) do
-       n = n + 1
-       if y > x then gt = gt + 1 end
-       if y < x then lt = lt + 1 end end end
-  return abs(gt - lt)/n <= the.delta end -- 0.195 
-
--- `boostrap(list[num], list[num]) --> bool`   
--- `Delta0` is an observation that compute an observation between two  lists.
--- Then we compare `delta0` to observations seen in hundreds of other random 
--- samples from those lists. Two distributions are the same if we can't tell a 
--- difference in those observations.
--- Taken from non-parametric significance test From Introduction to Bootstrap,
--- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
-function l.bootstrap(y0,z0)
-  local x,y,z,delta0,yhat,zhat,n,this,that,b
-  local N= function(t) return l.adds(NUM:new(),t) end
-  z,y,x  = N(z0), N(y0), l.adds(N(y0),z0)
-  yhat   = l.map(y0, function(y1) return y1 - y.mu + x.mu end)
-  zhat   = l.map(z0, function(z1) return z1 - z.mu + x.mu end)
-  n,b,delta0 = 0, the.Bootstraps, y:delta(z)
-  for i=1, b do 
-    if N(l.many(yhat)):delta(N((l.many(zhat)))) > delta0 then n = n + 1 end end
-  return n / b >= the.conf end
-
------------------ ----------------- ----------------- ----------------- ------------------
+--------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
 -- ## Utilities
--- In Lua, things have to be defined before they are used. So utilities
--- come before classes.
 -- ###  Lists
 
 -- `l.push(list,atom) --> atom`   
@@ -369,6 +316,19 @@ function l.datas(t,      i)
       if t[i]:find"csv" then
         return t[i], DATA:new():read(t[i]) end end end end
 
+-- `l.cli(dict) --> dict`        
+-- Update slot xxx in `dict` if there is a command line flag `-x`.
+-- For any slot `-x`  with an existing boolean value, then the flag `-x`
+-- negates the default.
+function l.cli(t)
+  for k,v in pairs(t) do
+    v = tostring(v)
+    for n,x in ipairs(arg) do
+      if x=="-"..(k:sub(1,1)) then
+        v= v=="false" and "true" or v=="true" and "false" or arg[n+1] end end 
+    t[k] = l.coerce(v) end 
+  return t end
+
 -- ### Thing to string
 
 -- `l.fmt(str,...) --> str`   
@@ -399,24 +359,65 @@ function l.new(klass, obj)
   klass.__tostring = klass.__tostring or l.o
   return setmetatable(obj, klass) end
 
--- ### Start-up
 
--- `l.cli(dict) --> dict`        
--- Update slot xxx in `dict` if there is a command line flag `-x`.
--- For any slot `-x`  with an existing boolean value, then the flag `-x`
--- negates the default.
-function l.cli(t)
-  for k,v in pairs(t) do
-    v = tostring(v)
-    for n,x in ipairs(arg) do
-      if x=="-"..(k:sub(1,1)) then
-        v= v=="false" and "true" or v=="true" and "false" or arg[n+1] end end 
-    t[k] = l.coerce(v) end 
-  return t end
+--------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
+-- ## Stats
 
----------------- ----------------- ----------------- ----------------- -----------------  
+function SOME:new(txt,samples,beats)
+  return l.new(SOME, {txt=txt, all={}, beats=beats, samples=(samples or 0), num=NUM:new()}) end
+
+function SOME:add(x)
+  l.push(self.all, x)
+  self.num:add(x) end
+
+function SOME:delta(other, eps,      d)
+  d = self.num.mu - other.num.mu
+  if abs(d) < (eps or 0) * self.num:pooledSd(other.num) then return 0 end
+  if l.cliffs(self.all, other.all) and l.bootstrap(self.all, other.all) then return 0 end
+  return d end
+
+-- `:delta(num) -> num`
+-- Reports the adjusted mean difference between two NUMs.
+function NUM:delta(other)
+  return abs(self.mu - other.mu) / ((1E-32 + self.sd^2/self.n + other.sd^2/other.n)^.5) end
+
+-- `:delta(num) -> num`   
+-- Reports weighted sum of the standard deviation of two NUMs
+function NUM:pooledSd(other)
+  return sqrt(((self.n-1)*self.sd^2 + (other.n-1)*other.sd^2)/(self.n+other.n-2)) end 
+
+-- `l.cliffs(list[num], list[num]) --> bool`    
+-- Two lists are the same if items from one  fall  towards the middle of the other list.
+function l.cliffs(xs,ys)
+  local lt,gt,n = 0,0,0
+  for _,x in pairs(xs) do
+     for _,y in pairs(ys) do
+       n = n + 1
+       if y > x then gt = gt + 1 end
+       if y < x then lt = lt + 1 end end end
+  return abs(gt - lt)/n <= the.delta end -- 0.195 
+
+-- `boostrap(list[num], list[num]) --> bool`   
+-- `Delta0` is an observation that compute an observation between two  lists.
+-- Then we compare `delta0` to observations seen in hundreds of other random 
+-- samples from those lists. Two distributions are the same if we can't tell a 
+-- difference in those observations.
+-- Taken from non-parametric significance test From Introduction to Bootstrap,
+-- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
+function l.bootstrap(y0,z0)
+  local x,y,z,delta0,yhat,zhat,n,this,that,b
+  local N= function(t) return l.adds(NUM:new(),t) end
+  z,y,x  = N(z0), N(y0), l.adds(N(y0),z0)
+  yhat   = l.map(y0, function(y1) return y1 - y.mu + x.mu end)
+  zhat   = l.map(z0, function(z1) return z1 - z.mu + x.mu end)
+  n,b,delta0 = 0, the.Bootstraps, y:delta(z)
+  for i=1, b do 
+    if N(l.many(yhat)):delta(N((l.many(zhat)))) > delta0 then n = n + 1 end end
+  return n / b >= the.conf end
+
+--------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
 -- ## EG
--- Store start-up actions.
+-- Define some possible start-up actions.
 
 local EG={}
 
@@ -465,7 +466,7 @@ function EG.csv(   d, n)
   for row in l.csv(the.train) do n=n+1; if n==1 or n%90==0 then l.oo(row) end end end
 
 -- Compare results from different statistical tests.
-function EG.stats(   r,t,u,d,Y)
+function EG.stats(   r,t,u,d,Y,n1,n2)
   Y = function(s) return s and "y" or "." end
   d,r= 1,100
   while d< 1.2 do
@@ -485,39 +486,46 @@ function EG.data(   d)
 -- Check the likelihood calculations.
 function EG.like(   d,n)
   n,d = 0,DATA:new():read(the.train) 
-  for _,row in pairs(d.rows) do 
+  for _,row in pairs(l.keysort(d.rows, function(r) return d:loglike(r,#d.rows,1) end)) do 
     n=n+1 
-    if n==1 or n % 15==0 then 
-      print(l.fmt("%.3f %s",d:loglike(row,#d.rows,2), l.o(row))) end end  end
+    if n==1 or n % 30==0 then 
+      print(l.fmt("%3s : %6.2f : %s",n,d:loglike(row,#d.rows,2), l.o(row))) end end  end
 
 -- One experiment, where we do a guided search of some data.
 function EG.acquire(     d, train,test)
+  print(the.train)
   d = DATA:new():read(the.train) 
+  n = l.adds(NUM:new(), l.map(d.rows, function(r) return d:ydist(r) end))
   train,test = d:acquire() 
-  print(d:ydist(train), d:ydist(test)) end
+  print(n.mu,d:ydist(train), d:ydist(test)) end 
 
 -- Another experiment, for multiple command line csv files, for guided search of some data.
-function EG.acquirea(     d,y,trains,tests,train,test,r,asIs,num0,num1,num2,eps,diff)
+function EG.acquires(    r)
   r = 20
+  UPDATE= function(now,b4)
+            if not b4 then return now end
+            if now:delta(b4) < 0 then now.beats= b4; return now end 
+            return b4 end 
+  ACQUIRES1= function(n,d,Y,      here,train,test)
+               here = {trains= SOME:new("exploit",n), tests=SOME:new("exploit_test",n)}
+               for i = 1,r do
+                 train,test = d:acquire() 
+                 here.trains:add(Y(train))
+                 here.tests:add(Y(test)) end
+               return here end 
   for file,d in l.datas(arg) do
-      Y= function(r) return d:ydist(r) end
-      asIs = l.adds(NUM:new(), l.map(d.rows, Y))
-      for _,n in pairs{15,30,50,80,120} do
-        the.Stop=n
-        trains,tests = {},{}
-        for i=1, r do
-          train,test = d:acquire() 
-          l.push(trains,Y(train)) 
-          l.push(tests, Y(test)) end
-        num0=l.adds(NUM:new(), asIs)
-        num1=l.adds(NUM:new(), trains)
-        num2=l.adds(NUM:new(), tests)
-        eps = num0.sd *.35
-        diff=num1.mu - num2.mu
-        l.oo{file=file:gsub(".*/",""), n=the.Stop, eps=eps,mu0=asIs.mu, mu1=num1.mu, mu2=num2.mu,
-             delta = l.same(train,tests) and 0 or abs(diff) < eps and 0 or diff} end end end 
-      
------------------ ----------------- ----------------- ----------------- -----------------  
+    local all,Y
+    Y   = function(r) return d:ydist(r) end
+    all = {asIs = l.adds(SOME:new("asIs",#d.rows), l.map(d.rows, Y))}
+    for _,n in pairs{15,30,60} do
+      the.Stop=n
+      for k,some in pairs(ACQUIRES1(n,d,Y)) do 
+        all[k] = UPDATE(some, all[k]) end  end
+    print""
+    for k,some in pairs(all) do
+       print(l.fmt("%5.2f %5s %-20s %s", some.num.mu, some.samples, some.txt,file)) end end end 
+    
+---------------- ----------------- ----------------- ----------------- -----------------  
 -- ## Start-up
 
 -- `l.tests(dict[str,callable], list[str])`   
@@ -530,7 +538,7 @@ function l.tests(eg,tests,      FN,_)
          math.randomseed(the.rseed)
          ok,msg = xpcall(eg[x], debug.traceback, _)
          bad = ok==false or msg==false
-         print((bad and "❌" or "✅") .." on "..x)
+         print((bad and "❌" or "✅") .."  on "..x)
          return bad and 1 or 0 end
   os.exit(l.sum(tests, FN)) end
 

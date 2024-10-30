@@ -42,14 +42,15 @@ lines:
 ~/tmp/%.pdf : %.lua  ## make pdf
 	@mkdir -p docs
 	@echo "pdf-ing $@ ... "
-	@a2ps -Bjr    -q                        \
-		--chars-per-line=120 \
+	@a2ps -BjR    -q                        \
+		--chars-per-line=100 \
 		--line-numbers=1                    \
 		--highlight-level=normal  \
-		--columns 3                 \
-		--borders=no --pro=color --columns 3 \
+		--columns 2                 \
+		--borders=no --pro=color  \
 		--right-footer="" --left-footer=""    \
 		--pretty-print=../etc/lua.ssh             \
 		--footer="page %p."                     \
 		-M letter -o $@.ps $<
 	@ps2pdf $@.ps $@; rm $@.ps
+	open $@
