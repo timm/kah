@@ -145,6 +145,32 @@ function DATA:clone(rows,     d)
   return DATA:new():add(self.cols.names):adds(rows) end
    
 --------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
+-- ## Dist
+
+-- `:ydist(list) --> 0..1`   
+-- Return the distance from a row's goals to best values for each goal.
+function DATA:ydist(row, D)
+  D = function(y) return (abs(y:norm(row[y.at]) - y.goal))^the.p end
+  return (l.sum(self.cols.y,D) /#self.cols.y)^(1/the.p) end
+
+function SYM:dist(a,b)
+  return (a=="?" and b=="?" and 0) or (a==b and 0 or 1) end
+
+function NUM:dist(a,b)
+  if a=="?" and b=="?" then return 1 end
+  a,b = self:norm(a), self:norm(b)
+  a = a ~= "?" and a or (b<0.5 and 1 or 0)
+  b = b ~= "?" and b or (a<0.5 and 1 or 0)
+  return abs(a-b) end
+
+-- Minkowski  distance
+function DATA:xdist(row1,row2,    d,n) -- (list) -> number
+  D = function(x) return x:dist(row1[x.at], row2[x.at])^the.p  end
+  return (l.sum(self.cols.x, D) / #self.cols.x) ^ (1/the.p) end
+
+function DATA:neighbors(row,rows)
+  return l.keysort(rows or self.rows, function(r) return self:xdist(r,row) end) end
+--------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
 -- ## Bayes
 
 --  `:like(num, num) --> num`   
@@ -168,12 +194,6 @@ function DATA:loglike(row, nall, nh,          prior,F,G)
   F     = function(x) return L( x:like(row[x.at], prior) ) end
   L     = function(n) return n>0 and log(n) or 0 end
   return L(prior) + l.sum(self.cols.x, F) end
-
--- `:ydist(list) --> 0..1`   
--- Return the distance from a row's goals to best values for each goal.
-function DATA:ydist(row, D)
-  D = function(y) return (abs(y:norm(row[y.at]) - y.goal))^the.p end
-  return (l.sum(self.cols.y,D) /#self.cols.y)^(1/the.p) end
 
 -- `DATA:active() --> list,list`  
 --      
@@ -502,25 +522,25 @@ function EG.acquire(     d, train,test)
 -- Another experiment, for multiple command line csv files, for guided search of some data.
 function EG.acquires(    r)
   r = 20
-  UPDATE= function(now,b4)
-            if not b4 then return now end
-            if now:delta(b4) < 0 then now.beats= b4; return now end 
-            return b4 end 
-  ACQUIRES1= function(n,d,Y,      here,train,test)
-               here = {trains= SOME:new("exploit",n), tests=SOME:new("exploit_test",n)}
-               for i = 1,r do
-                 train,test = d:acquire() 
-                 here.trains:add(Y(train))
-                 here.tests:add(Y(test)) end
-               return here end 
+  ALL= function(now,b4)
+         if not b4 then return now end
+         if now:delta(b4) < 0 then now.beats= b4; return now end 
+         return b4 end 
+  STEP= function(n,d,Y,      here,train,test)
+          here = {trains= SOME:new("exploit",n), tests=SOME:new("exploit_test",n)}
+          for i = 1,r do
+            train,test = d:acquire() 
+            here.trains:add(Y(train))
+            here.tests:add(Y(test)) end
+          return here end 
   for file,d in l.datas(arg) do
     local all,Y
     Y   = function(r) return d:ydist(r) end
     all = {asIs = l.adds(SOME:new("asIs",#d.rows), l.map(d.rows, Y))}
     for _,n in pairs{15,30,60} do
       the.Stop=n
-      for k,some in pairs(ACQUIRES1(n,d,Y)) do 
-        all[k] = UPDATE(some, all[k]) end  end
+      for k,some in pairs(STEP(n,d,Y)) do 
+        all[k] = ALL(some, all[k]) end  end
     print""
     for k,some in pairs(all) do
        print(l.fmt("%5.2f %5s %-20s %s", some.num.mu, some.samples, some.txt,file)) end end end 
