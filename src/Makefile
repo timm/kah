@@ -25,6 +25,19 @@ lines:
 	$(MAKE) ~/tmp/lines.pdf
 	rm lines.lua
 
+../tmp/kah.pdf: kah.lua
+	mkdir -p $$HOME/tmp
+	(cd ../docs; pdflatex -shell-escape -output-directory=$$HOME/tmp kah.tex)
+
+luas: kah.lua
+	mkdir -p ../docs/luas
+	gawk '/ ## / {F="../docs/luas/"$$3".lua"; N=0; print "">F; next; next } \
+				/^--/  {next} \
+				/^$$/ {next } \
+				// {next } \
+				/^(function|local)/ { if (N>2) {print "">>F}; N++} \
+				F      {N++; print >>F }' kah.lua
+
 ../docs/%.html : %.lua
 	pycco -d ../docs  $^
 	echo "p { text-align: right;  }  " >> ../docs/pycco.css

@@ -1,5 +1,4 @@
 #!/usr/bin/env lua 
--- <!-- vim : set tabstop=2 shiftwidth=2 expandtab : -->
 -- - This Lua script is a program designed for sequential
 --   model-based optimization using a Tree-structured Parzen Estimator
 --   (TPE) and a Bayesian classifier. It facilitates experimentation
@@ -17,6 +16,7 @@
 --     - Some classes;
 --     - A library of start-up actions called `EG`;
 --     - The actual start-up actions.
+-- ## Starting
 local l,the,big,help = {},{},1E32,[[
 
 kah.lua : how to change your mind (using TPE + Bayes classifier)
@@ -49,7 +49,7 @@ local abs, cos, exp, log    = math.abs, math.cos, math.exp, math.log
 local max, min, pi, R, sqrt = math.max, math.min, math.pi, math.random, math.sqrt
       
 ---------------- ----------------- ----------------- ----------------- -----------------
--- ## Data Model
+-- ## Data 
 
 -- ### SYM
 -- SYMs  summarize a stream of atoms seen in column `at`.
