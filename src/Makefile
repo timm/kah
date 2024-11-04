@@ -25,7 +25,7 @@ lines:
 	$(MAKE) ~/tmp/lines.pdf
 	rm lines.lua
 
-../tmp/kah.pdf: kah.lua
+~/tmp/kah.pdf: kah.lua
 	mkdir -p $$HOME/tmp
 	(cd ../docs; pdflatex -shell-escape -output-directory=$$HOME/tmp kah.tex)
 

@@ -84,3 +84,7 @@ function l.new(klass, obj)
   klass.__index    = klass
   klass.__tostring = klass.__tostring or l.o
   return setmetatable(obj, klass) end
+
+function l.green(s) return l.fmt('\27[30;42m%s\27[0m',s) end
+
+function l.red(s) return l.fmt('\27[30;41m%s\27[0m',s) end

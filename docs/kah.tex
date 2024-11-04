@@ -1,7 +1,8 @@
-\documentclass[10pt,portrait]{book}
+\documentclass[10pt,twocolumn,landscape]{book}
 \usepackage[T1]{fontenc}
 \usepackage{inconsolata}
 \usepackage{textcomp}
+\usepackage{float}
 
 \usepackage{xcolor}
 \usepackage{graphicx}
@@ -16,7 +17,6 @@
 % }
 %
 \usepackage[cache=false]{minted}
-\usepackage{unicode-math}
 \usemintedstyle{tango}
 \definecolor{bg}{rgb}{0.95, 0.95, 0.95} % very light gray
 \definecolor{shadow}{rgb}{0.85, 0.85, 0.85} % slightly darker for shadow
@@ -24,12 +24,13 @@
 \setminted[lua]{%
   frame=single,%
   framesep=2mm,%
-  fontsize=\fontsize{6}{6}\selectfont,%
-  baselinestretch=1.2,%
+  fontsize=\fontsize{5}{5}\selectfont,%
+  baselinestretch=1.1,%
   breaklines=true,%
   mathescape=true,%
   bgcolor=bg,%
 }
+
 
 \usepackage{enumitem}
 \setitemize{noitemsep,topsep=0pt,parsep=0pt,partopsep=0pt}
@@ -45,7 +46,6 @@
 \maketitle
 \small
 
-\twocolumn
  This Lua script is a program designed for sequential
    model-based optimization using a Tree-structured Parzen Estimator
    (TPE) and a Bayesian classifier. It facilitates experimentation
@@ -72,32 +72,45 @@
    \end{itemize}
    \end{itemize}
 
-\begin{figure}
+\begin{figure}[!t]
+\caption{Bayes functions.}\label{bayes}
 \inputminted{lua}{luas/Bayes.lua}
 \end{figure}
 
-\begin{figure}
+\begin{figure}[!t]
+\caption{Data functions.}\label{data}
 \inputminted{lua}{luas/Data.lua}
 \end{figure}
-\begin{figure}
+
+\begin{figure}[!t]
+\caption{Dist functions.}\label{dist}
 \inputminted{lua}{luas/Dist.lua}
 \end{figure}
-\begin{figure}
+
+\begin{figure}[!t]
+\caption{EG functions.}\label{eg}
 \inputminted{lua}{luas/EG.lua}
 \end{figure}
-\begin{figure}
+
+\begin{figure}[!t]
+\caption{Start-up functions.}\label{start-up}
 \inputminted{lua}{luas/Start-up.lua}
 \end{figure}
-\begin{figure}
+
+\begin{figure}[!t]
+\caption{Starting.}\label{starting}
 \inputminted{lua}{luas/Starting.lua}
 \end{figure}
-\begin{figure}
+
+\begin{figure}[!t]
+\caption{Stats.}\label{stats}
 \inputminted{lua}{luas/Stats.lua}
 \end{figure}
-\begin{figure}
+
+\begin{figure}[!t]
+\caption{Utils.}\label{utils}
 \inputminted{lua}{luas/Utilities.lua}
 \end{figure}
-
 
 
 \end{document}

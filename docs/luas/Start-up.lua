@@ -4,7 +4,7 @@ function l.tests(eg,tests,      FN,_)
          math.randomseed(the.rseed)
          ok,msg = xpcall(eg[x], debug.traceback, _)
          bad = ok==false or msg==false
-         print((bad and "❌" or "✅") .."  on "..x)
+         print((bad and l.red" FAIL " or l.green" PASS ") .." on "..x)
          return bad and 1 or 0 end
   os.exit(l.sum(tests, FN)) end
 help:gsub("%s+-%S%s(%S+)[^=]+=%s+(%S+)%s*\n", function(k,v) the[k]= l.coerce(v) end)
