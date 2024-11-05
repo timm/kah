@@ -227,7 +227,8 @@ function DATA:acquire()
 local TREE={}
 function TREE:new(data1,data2,  ifTrue,guard0,lvl)
   if #data1.rows + #data2.rows < the.leafsize then return end
-  local all,ok1,no1,ok2,no2 = data1:clone(),data1:clone(),data1:clone(),data1:clone(),data1:clone()
+  local NEW = function() return data1:clone() end
+  local all, ok1, no1, ok2, no2 = NEW(), NEW(), NEW(), NEW(), NEW()
   local guard = data1:guard(data2)
   for _,r in pairs(data1.rows) do all:add(r); (guard:ok(r) and ok1 or no1):add(r)  end
   for _,r in pairs(data2.rows) do all:add(r); (guard:ok(r) and ok2 or no2):add(r)  end
