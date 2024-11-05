@@ -34,6 +34,7 @@ OPTIONS:
   -d delta      Cliff's delta            = .195
   -h help       show help                = false
   -k k          bayes control            = 1
+  -l leafsize   min leaf size            = 4
   -m m          bayes control            = 2
   -p p          distance coeffecient     = 2
   -r rseed      random seed              = 1234567891
@@ -223,39 +224,43 @@ function DATA:acquire()
   return done[1], l.keysort(test,BR)[#test] end     --- [7]
 
 --------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
-local BIN={}
-function BIN:new(col,score,lo,hi)
-  return l.new(BIN,{score=score, at=col.at, txt=col.txt, lo=lo, hi=hi or lo}) end
-
-function BIN:select(row)
-  x = row[self.at]
-  return x=="?" and row or self.lo==self.hi and self.lo==x or self.lo <= x and x < self.hi end 
-
 local TREE={}
-function TREE:new(data1,data2,guard)
-  local b4, bin,iyes,ino,jyes,jno
-  self = l.new(TREE,{left=data1, right=data2, guard=guard}) 
-  guard = data1:contrast(data2)
-  iyes, ino, jyes, jno = {},{},{},{}
-  for _,r in pairs(i.rows) do push(bin:select(guard) and iyes and ino, r) end
-  for _,r in pairs(j.rows) do push(bin:select(guard) and jyes and jno, r) end end
+function TREE:new(data1,data2,  ifTrue,guard0,lvl)
+  if #data1.rows + #data2.rows < the.leafsize then return end
+  local all,ok1,no1,ok2,no2 = data1:clone(),data1:clone(),data1:clone(),data1:clone(),data1:clone()
+  local guard = data1:guard(data2)
+  for _,r in pairs(i.rows) do all:add(r); (guard:ok(r) and ok1 or no1):add(r)  end
+  for _,r in pairs(j.rows) do all:add(r); (guard:ok(r) and ok2 or no2):add(r)  end
+  return l.new(TREE, {lvl    = lvl or 0,
+                      here   = all,
+                      guard  = guard0,
+                      ifTrue = ifTrue,
+                      ok     = TREE:new(ok1, ok2, true,  guard, lvl or 1),
+                      no     = TREE:new(no1, no2, false, guard, lvl or 1)}) end 
 
-function DATA.contrast(i,j,       most,out,col2,tmp)
-  most = 0
-	for k,col1 in pairs(i.cols.x) do
-    col2 = j.cols.x[k]
-    tmp  = col1:contrast(col2)
-    if tmp.score > most then most,out = tmp.score,score end end
-  return out end
+local GUARD={}
+function GUARD:new(col,score,lo,hi)
+  return l.new(GUARD,{score=score, at=col.at, txt=col.txt, lo=lo, hi=hi or lo}) end
 
-function SYM.contrast(i,j,    most,tmp,out)
+function GUARD:ok(row)
+  x = row[self.at]
+  return x=="?" and row or self.lo==self.hi and self.lo==x or self.lo <= x and x < self.hi end
+
+function DATA:guard(other,       most,guard,tmp)
   most = 0
-  for x,yes in pairs(i.count) do
-    yes = yes/i.n
-    no  = (j.count[x] or 0)/(j.n + 1E-32) 
-    tmp = yes - no
-    if tmp > most then most,out = tmp,k end end
-  return BIN:new(i, most, x) end
+	for k,col1 in pairs(self.cols.x) do
+    tmp  = col1:guard(other.cols.x[k])
+    if tmp.score > most then most,guard = tmp.score,tmp end end
+  return guard end
+
+function SYM:guard(other,    most,tmp,it,no)
+  most = 0
+  for k,ok in pairs(self.count) do
+    ok  = ok/self.n
+    no  = (other.count[x] or 0)/(other.n + 1E-32) 
+    tmp = ok - no
+    if tmp > most then most,it = tmp,k end end
+  return GUARD:new(self, most, it) end
 
 -- Cumulative distribution (area under the pdf up to x).
 function NUM:cdf(x,     z,CDF)
@@ -265,16 +270,17 @@ function NUM:cdf(x,     z,CDF)
 
 -- Return value of favoring `i.mu` From
 -- [stackoverflow](https://stackoverflow.com/questions/22579434/python-finding-the-intersection-point-of-two-gaussian-curves).
-function NUM.contrast(i,j,    a,b,c, yes,no,x1,x2)
+function NUM:guard(other,    i,ja,b,c, ok,no,x1,x2)
+  i,j = self,other
   a  = 1/(2*i.sd^2)  - 1/(2*j.sd^2)  
   b  = j.mu/(j.sd^2) - i.mu/(i.sd^2)
   c  = i.mu^2 /(2*i.sd^2) - j.mu^2 / (2*j.sd^2) - log(j.sd/(i.sd + 1E-32))  
   x1 = (-b - (b^2 - 4*a*c)^.5)/(2*a + 1E-32)
   x2 = (-b + (b^2 - 4*a*c)^.5)/(2*a + 1E-32)
-  if x1 > x2 then x1,x2=x2,x1 end
-  yes = i:cdf(x2) - i:cdf(x1)
-  no  = j:cdf(x2) - j:cdf(x1)
-  return BIN:new(i, yes - no, x1, x2) end
+  if x1 > x2 then x1,x2 = x2,x1 end
+  ok = i:cdf(x2) - i:cdf(x1)
+  no = j:cdf(x2) - j:cdf(x1)
+  return GUARD:new(i, ok - no, x1, x2) end
 
 --------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
 -- ## Utilities

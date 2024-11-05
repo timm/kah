@@ -1,5 +1,5 @@
 -- luarocks install kah-0.1-0.rockspec
-
+-- https://github.com/luarocks/luarocks/wiki/creating-a-rock#the-completed-rockspec
 package = "kah"
 version = "0.1-0"
 source = {
