@@ -89,11 +89,6 @@ function NUM:add(x)
     if x > self.hi then self.hi = x end
     if x < self.lo then self.lo = x end end end
  
--- `:norm(num) --> 0..1`  
--- Map `x` to the range 0..1 for `lo`..`hi`.
-function NUM:norm(x)
-  return x=="?" and x or (x - self.lo)/(self.hi - self.lo) end
-
 -- ### COLS
 -- COLS are factories for generating NUMs or SYMs from a list of column names.
 
@@ -226,6 +221,60 @@ function DATA:acquire()
       l.push(done, table.remove(todo)); 
       l.push(done, table.remove(todo,1)) end end
   return done[1], l.keysort(test,BR)[#test] end     --- [7]
+
+--------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
+local BIN={}
+function BIN:new(col,score,lo,hi)
+  return l.new(BIN,{score=score, at=col.at, txt=col.txt, lo=lo, hi=hi or lo}) end
+
+function BIN:select(row)
+  x = row[self.at]
+  return x=="?" and row or self.lo==self.hi and self.lo==x or self.lo <= x and x < self.hi end 
+
+local TREE={}
+function TREE:new(data1,data2,guard)
+  local b4, bin,iyes,ino,jyes,jno
+  self = l.new(TREE,{left=data1, right=data2, guard=guard}) 
+  guard = data1:contrast(data2)
+  iyes, ino, jyes, jno = {},{},{},{}
+  for _,r in pairs(i.rows) do push(bin:select(guard) and iyes and ino, r) end
+  for _,r in pairs(j.rows) do push(bin:select(guard) and jyes and jno, r) end end
+
+function DATA.contrast(i,j,       most,out,col2,tmp)
+  most = 0
+	for k,col1 in pairs(i.cols.x) do
+    col2 = j.cols.x[k]
+    tmp  = col1:contrast(col2)
+    if tmp.score > most then most,out = tmp.score,score end end
+  return out end
+
+function SYM.contrast(i,j,    most,tmp,out)
+  most = 0
+  for x,yes in pairs(i.count) do
+    yes = yes/i.n
+    no  = (j.count[x] or 0)/(j.n + 1E-32) 
+    tmp = yes - no
+    if tmp > most then most,out = tmp,k end end
+  return BIN:new(i, most, x) end
+
+-- Cumulative distribution (area under the pdf up to x).
+function NUM:cdf(x,     z,CDF)
+  CDF = function(z) return 1 - 0.5*exp(-0.717*z - 0.416*z*z) end
+  z = (x - self.mu)/self.sd
+  return z >=  0 and CDF(z) or 1 - CDF(-z) end
+
+-- Return value of favoring `i.mu` From
+-- [stackoverflow](https://stackoverflow.com/questions/22579434/python-finding-the-intersection-point-of-two-gaussian-curves).
+function NUM.contrast(i,j,    a,b,c, yes,no,x1,x2)
+  a  = 1/(2*i.sd^2)  - 1/(2*j.sd^2)  
+  b  = j.mu/(j.sd^2) - i.mu/(i.sd^2)
+  c  = i.mu^2 /(2*i.sd^2) - j.mu^2 / (2*j.sd^2) - log(j.sd/(i.sd + 1E-32))  
+  x1 = (-b - (b^2 - 4*a*c)^.5)/(2*a + 1E-32)
+  x2 = (-b + (b^2 - 4*a*c)^.5)/(2*a + 1E-32)
+  if x1 > x2 then x1,x2=x2,x1 end
+  yes = i:cdf(x2) - i:cdf(x1)
+  no  = j:cdf(x2) - j:cdf(x1)
+  return BIN:new(i, yes - no, x1, x2) end
 
 --------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
 -- ## Utilities
