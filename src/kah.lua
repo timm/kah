@@ -229,8 +229,8 @@ function TREE:new(data1,data2,  ifTrue,guard0,lvl)
   if #data1.rows + #data2.rows < the.leafsize then return end
   local all,ok1,no1,ok2,no2 = data1:clone(),data1:clone(),data1:clone(),data1:clone(),data1:clone()
   local guard = data1:guard(data2)
-  for _,r in pairs(i.rows) do all:add(r); (guard:ok(r) and ok1 or no1):add(r)  end
-  for _,r in pairs(j.rows) do all:add(r); (guard:ok(r) and ok2 or no2):add(r)  end
+  for _,r in pairs(data1.rows) do all:add(r); (guard:ok(r) and ok1 or no1):add(r)  end
+  for _,r in pairs(data2.rows) do all:add(r); (guard:ok(r) and ok2 or no2):add(r)  end
   return l.new(TREE, {lvl    = lvl or 0,
                       here   = all,
                       guard  = guard0,
@@ -242,7 +242,7 @@ local GUARD={}
 function GUARD:new(col,score,lo,hi)
   return l.new(GUARD,{score=score, at=col.at, txt=col.txt, lo=lo, hi=hi or lo}) end
 
-function GUARD:ok(row)
+function GUARD:ok(row,      x)
   x = row[self.at]
   return x=="?" and row or self.lo==self.hi and self.lo==x or self.lo <= x and x < self.hi end
 
@@ -257,7 +257,7 @@ function SYM:guard(other,    most,tmp,it,no)
   most = 0
   for k,ok in pairs(self.count) do
     ok  = ok/self.n
-    no  = (other.count[x] or 0)/(other.n + 1E-32) 
+    no  = (other.count[k] or 0)/(other.n + 1E-32)
     tmp = ok - no
     if tmp > most then most,it = tmp,k end end
   return GUARD:new(self, most, it) end
@@ -270,7 +270,7 @@ function NUM:cdf(x,     z,CDF)
 
 -- Return value of favoring `i.mu` From
 -- [stackoverflow](https://stackoverflow.com/questions/22579434/python-finding-the-intersection-point-of-two-gaussian-curves).
-function NUM:guard(other,    i,ja,b,c, ok,no,x1,x2)
+function NUM:guard(other,    i,j,a,b,c, ok,no,x1,x2)
   i,j = self,other
   a  = 1/(2*i.sd^2)  - 1/(2*j.sd^2)  
   b  = j.mu/(j.sd^2) - i.mu/(i.sd^2)
@@ -569,7 +569,7 @@ function EG.like(   d,n)
       print(l.fmt("%3s : %6.2f : %s",n,d:loglike(row,#d.rows,2), l.o(row))) end end  end
 
 -- One experiment, where we do a guided search of some data.
-function EG.acquire(     d, train,test)
+function EG.acquire(     d,n,train,test)
   print(the.train)
   d = DATA:new():read(the.train) 
   n = l.adds(NUM:new(), l.map(d.rows, function(r) return d:ydist(r) end))
