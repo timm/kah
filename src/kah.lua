@@ -241,7 +241,7 @@ function TREE:new(data1,data2,  ifTrue,guard0,lvl)
 
 local GUARD={}
 function GUARD:new(col,score,lo,hi)
-  return l.new(GUARD,{score=score, at=col.at, txt=col.txt, lo=lo, hi=hi or lo}) end
+  return l.new(GUARD, {at=col.at, txt=col.txt, lo=lo, hi=hi or lo, score=score}) end
 
 function GUARD:ok(row,      x)
   x = row[self.at]
