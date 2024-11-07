@@ -221,7 +221,7 @@ function DATA:acquire()
     for _=1,2 do                                    --- [5]
       l.push(done, table.remove(todo)); 
       l.push(done, table.remove(todo,1)) end end
-  return done[1], l.keysort(test,BR)[#test] end     --- [7]
+  return done, test, BR end     --- [7]
 
 --------- --------- --------- --------- --------- --------- --------- --------- --------- --------- 
 local TREE={}
@@ -570,12 +570,14 @@ function EG.like(   d,n)
       print(l.fmt("%3s : %6.2f : %s",n,d:loglike(row,#d.rows,2), l.o(row))) end end  end
 
 -- One experiment, where we do a guided search of some data.
-function EG.acquire(     d,n,train,test)
+function EG.acquire(     d,n,trains,tests, model)
   print(the.train)
   d = DATA:new():read(the.train) 
   n = l.adds(NUM:new(), l.map(d.rows, function(r) return d:ydist(r) end))
-  train,test = d:acquire() 
-  print(n.mu,d:ydist(train), d:ydist(test)) end 
+  print(1)
+  trains,tests, model = d:acquire() 
+  tests = l.keysort(tests, model)
+  print(n.mu,d:ydist(trains[1]), d:ydist(tests[#tests])) end 
 
 -- Another experiment, for multiple command line csv files, for guided search of some data.
 function EG.acquires(    r)
