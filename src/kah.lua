@@ -573,11 +573,13 @@ function EG.like(   d,n)
 function EG.acquire(     d,n,trains,tests, model)
   print(the.train)
   d = DATA:new():read(the.train) 
-  n = l.adds(NUM:new(), l.map(d.rows, function(r) return d:ydist(r) end))
+  print(2,#d.rows)
+  n = l.adds(NUM:new(), l.map(d.rows, function(r) print(100); return d:ydist(r) end))
   print(1)
   trains,tests, model = d:acquire() 
-  tests = l.keysort(tests, model)
-  print(n.mu,d:ydist(trains[1]), d:ydist(tests[#tests])) end 
+  --tests = l.keysort(tests, model)
+  --print(n.mu,d:ydist(trains[1]), d:ydist(tests[#tests])) 
+  end 
 
 -- Another experiment, for multiple command line csv files, for guided search of some data.
 function EG.acquires(    r)
