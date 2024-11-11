@@ -1,4 +1,4 @@
-itSHELL:= /bin/bash#
+SHELL:= /bin/bash#
 .SILENT: # no output
 
 LOUD = \033[1;34m#
