@@ -1,5 +1,12 @@
-local the = {rseed=1234567891, k=1, m=2,
-             train="../../data/auto93.csv"}
+local the = {
+  acquire = 500,
+  k     = 1, 
+  m     = 2,
+  rseed = 1234567891, 
+  start = 4,
+  Stop  = 30,
+  train = "../../data/auto93.csv",
+  Test  = 0.33}
 
 ---------------------------------------------------------------------
 local BIG = 1E32
@@ -7,6 +14,7 @@ local coerce,kap,lt,map,normal,push,o,sort,sum
 local abs, cos,exp,log = math.abs, math.cos, math.exp, math.log
 local max,min,pi,R,sqrt = math.max, math.min, math.pi, math.random, math.sqrt
 
+---------------------------------------------------------------------
 function normal(mu,sd) 
   return (mu or 0) + (sd or 1) * sqrt(-2*log(R())) * cos(2*pi*R()) end
 
@@ -16,8 +24,16 @@ function kap(t,f,   u) u={}; for k,v in pairs(t) do u[1+#u]=f(k,v)        end; r
 function map(t,f,   u) u={}; for _,v in pairs(t) do u[1+#u]=f(  v)        end; return u end
 function sum(t,f,   n) n=0;  for _,v in pairs(t) do n=n+(f and f(v) or v) end; return n end
 
+function lt(x) return function(a,b) return a[x] < b[x] end end
 function sort(t,fn) table.sort(t,fn); return t end
-function lt(x)      return function(a,b) return a[x] < b[x] end end
+
+function keysort(t,fn,     decorate,undecorate)
+  decorate   = function(x) return {fn(x),x} end
+  undecorate = function(x) return x[2] end
+  return map(sort(map(t,decorate),lt(1)), undecorate) end
+
+function shuffle(t,    j)
+  for i = #t,2,-1 do j=R(i); t[i],t[j] = t[j],t[i] end; return t end
 
 function o(x,     f,g,fmt) 
   fmt= string.format
@@ -66,7 +82,7 @@ function Cols(names,    i,col)
   return i end
 
 ---------------------------------------------------------------------
-local addCol,addData,csv2Data,cloneData
+local addCol,addData,read,clone
 
 function addCol(i,x,     d)
   if x=="?" then return end
@@ -86,17 +102,20 @@ function addData(i,row)
   for k,v in pairs(row) do addCol(i.cols.all[k], v) end
   push(i.rows, row) end
 
-function csv2Data(file,   i)
+function read(file,   i)
   for row in csv(file) do
     if i then addData(i,row) else i=Data(row) end end 
   return i end
 
-function cloneData(i, j,rows)
+function clone(i, rows,   j)
   j = Data(i.cols.names)
   for _,row in pairs(rows or {}) do addData(j, row) end
   return j end
 
-function likeCol(i,x,prior,     v,tmp)
+---------------------------------------------------------------------
+
+---------------------------------------------------------------------
+function like(i,x,prior,     v,tmp)
   if i.is=="Sym" then
     return ((i.has[x] or 0) + the.m*prior) / (i.n + the.m)  
   else
@@ -104,11 +123,37 @@ function likeCol(i,x,prior,     v,tmp)
     tmp = exp(-1*(x - i.mu)^2/(2*v)) / (2*pi*v) ^ 0.5
     return max(0,min(1, tmp + 1/BIG)) end end
 
-function loglikeData(i,row, nall, nh,          prior,f,l)
+function loglike(i,row, nall, nh,          prior,f,l)
   prior = (#i.rows + the.k) / (nall + the.k*nh)
-  f     = function(x) return l( likeCol(x, row[x.at], prior) ) end
+  f     = function(x) return l( like(x, row[x.at], prior) ) end
   l     = function(n) return n>0 and log(n) or 0 end
   return l(prior) + sum(i.cols.x, f) end
+
+function acquire(i,      acq,br,most,test,done,todo,y)
+  acq  = acq or function(b,r) return b - r end
+  y    = function(row) return ydist(i,row) end
+  b    = function(row) return loglike(best,row, #done, 2) end 
+  r    = function(row) return loglike(rest,row, #done, 2) end 
+  br   = function(row) return acq(b(row), r(row)) end
+  most = min(500, the.Test*#i.rows)
+  test,done,todo = {},{},{}
+  for j,row in pairs(shuffle(i.rows)) do
+    push((j <= the.start and done) or (j > most and test) or todo, row) end
+  while true do
+    done = keysort(done, y) 
+    if #done > the.Stop or #todo < 5 then break end 
+    best,rest = _clones(i, done, sqrt(#done)) 
+    todo = keysort(todo, br)                
+    for _ = 1,2 do
+      push(done, table.remove(todo, 1)) 
+      push(done, table.remove(todo, #todo)) end
+  return done, _acquires(test, b,r) end   
+
+function _clones(i,t,n,    u,v)
+  u,v={},{}
+  for j,x in pairs(t) do push(j<=n and u or v,x) end
+  return clone(i,u), clone(i,v) end
+
 
 ---------------------------------------------------------------------
 local ok={}
@@ -125,11 +170,11 @@ function ok.sym(_, s)
   print(o(s)) end
 
 function ok.data(_, d)
-  d = csv2Data(the.train) 
+  d = read(the.train) 
   for _,col in pairs(d.cols.all) do print(o(col)) end end
 
 function ok.like(_, d)
-  d = csv2Data(the.train) 
+  d = read(the.train) 
   for j,row in pairs(d.rows) do 
     if j==1 or j%15==0 then
       print(j,loglikeData(d,row,1000,2)) end end end
