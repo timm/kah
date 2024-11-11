@@ -2,6 +2,7 @@ local the = {
   acquire = 500,
   k     = 1, 
   m     = 2,
+  p     = 2,
   rseed = 1234567891, 
   start = 4,
   Stop  = 30,
@@ -40,7 +41,7 @@ function Cols(names,    i,this)
 ---------------------------------------------------------------------
 local addCol,addData,read,clone
 
-function addCol(i,x,     d)
+function addCol(i,x,     d) --(i:NUM|SYM, x:atom): nil
   if x=="?" then return end
   i.n = i.n + 1
   if i.is=="Sym" then
@@ -63,10 +64,29 @@ function read(file,   i)
     if i then addData(i,row) else i=Data(row) end end 
   return i end
 
-function clone(i, rows,   j)
+function clone(i, rows,   j) --> Data1,[row] --> Data2
   j = Data(i.cols.names)
   for _,row in pairs(rows or {}) do addData(j, row) end
   return j end
+---------------------------------------------------------------------
+function ydist(i,row,  d) --> Data, row --> num
+  d = function(y) return (abs(norm(y,row[y.at]) - y.goal))^the.p end
+  return (sum(i.cols.y,d) /#i.cols.y)^(1/the.p) end
+
+function dist(i,a,b) --> Col, atom, atom --> float
+  if a=="?" and b=="?" then return 1 end
+  if i.is== "Sym" then return (a==b and 0 or 1) end
+  a,b = norm(i,a), norm(i,b)
+  a = a ~= "?" and a or (b<0.5 and 1 or 0)
+  b = b ~= "?" and b or (a<0.5 and 1 or 0)
+  return abs(a-b) end
+
+function xdist(i,row1,row2,    d,n) --> [row] ---> num
+  d = function(x) return dist(i,row1[x.at], row2[x.at])^the.p  end
+  return (sum(i.cols.x, d) / #i.cols.x) ^ (1/the.p) end
+
+function neighbors(i,row,  rows) --> DATA,row,[row]? --> [row]
+  return keysort(rows or i.rows, function(r) return xdist(i,r,row) end) end
 
 ---------------------------------------------------------------------
 local like,likes,likesMost
@@ -85,7 +105,7 @@ function loglikes(i,row, nall, nh,          prior,f,l)
   l     = function(n) return n>0 and log(n) or 0 end
   return l(prior) + sum(i.cols.x, f) end
 
-function likesMost(i,      acq,y,b,r,br,init,test,train,done,todo,best,rest)
+function guessMostLiked(i,      acq,y,b,r,br,init,test,train,done,todo,best,rest)
   acq  = acq or function(b,r) return b - r end
   y    = function(row) return ydist(i,row) end
   b    = function(row) return loglikes(best,row, #done, 2) end 
