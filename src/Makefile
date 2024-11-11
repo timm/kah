@@ -28,6 +28,7 @@ lines:
 ~/tmp/kah.pdf: kah.lua
 	mkdir -p $$HOME/tmp
 	(cd ../docs; pdflatex -shell-escape -output-directory=$$HOME/tmp kah.tex)
+	open $@
 
 luas: kah.lua
 	mkdir -p ../docs/luas

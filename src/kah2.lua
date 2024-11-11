@@ -10,56 +10,12 @@ local the = {
 
 ---------------------------------------------------------------------
 local BIG = 1E32
-local coerce,kap,lt,map,normal,push,o,sort,sum
+local coerce,csv,kap,keysort,lt,map,normal
+local pop,push,o,shuffle,sort,split,sum
 local abs, cos,exp,log = math.abs, math.cos, math.exp, math.log
 local max,min,pi,R,sqrt = math.max, math.min, math.pi, math.random, math.sqrt
 
----------------------------------------------------------------------
-function normal(mu,sd) 
-  return (mu or 0) + (sd or 1) * sqrt(-2*log(R())) * cos(2*pi*R()) end
-
-function push(t,x)  t[1+#t]=x; return x end
-
-function kap(t,f,   u) u={}; for k,v in pairs(t) do u[1+#u]=f(k,v)        end; return u end
-function map(t,f,   u) u={}; for _,v in pairs(t) do u[1+#u]=f(  v)        end; return u end
-function sum(t,f,   n) n=0;  for _,v in pairs(t) do n=n+(f and f(v) or v) end; return n end
-
-function lt(x) return function(a,b) return a[x] < b[x] end end
-function sort(t,fn) table.sort(t,fn); return t end
-
-function keysort(t,fn,     decorate,undecorate)
-  decorate   = function(x) return {fn(x),x} end
-  undecorate = function(x) return x[2] end
-  return map(sort(map(t,decorate),lt(1)), undecorate) end
-
-function shuffle(t,    j)
-  for i = #t,2,-1 do j=R(i); t[i],t[j] = t[j],t[i] end; return t end
-
-function o(x,     f,g,fmt) 
-  fmt= string.format
-  f= function(x) return #x>0 and map(x,o) or sort(kap(x,g)) end
-  g= function(k,v) if k ~= "is" then return fmt(":%s %s",k,o(x[k])) end end
-  return type(x)=="number" and fmt("%g",x) or  
-         type(x)~="table"  and tostring(x) or 
-         (x.is or "") .. "(" .. table.concat(f(x)," ") .. ")" end 
-
-function coerce(s,     other,trim) 
-  trim  = function(s) return s:match"^%s*(.-)%s*$" end
-  other = function(s) return s=="true" and true or s ~= "false" and s end
-  return math.tointeger(s) or tonumber(s) or other(trim(s)) end
-
-function csv(file,     src)
-  if file and file ~="-" then src=io.input(file) end
-  return function(     s,t)
-    s = io.read()
-    if s then
-      t={}
-      for s1 in s:gmatch"([^,]+)" do t[1+#t]=coerce(s1) end
-      return t 
-    else 
-      if src then io.close(src) end end end end
-
----------------------------------------------------------------------
+-------------------------------------------------------------------
 local Num,Sym,Data,Cols
 
 function Num(name,at) 
@@ -72,13 +28,13 @@ function Sym(name,at)
 function Data(names)
   return {is="Data",rows={}, cols=Cols(names)} end
 
-function Cols(names,    i,col)
+function Cols(names,    i,this)
   i = {is="Cols", names=names, all={}, x={}, y={}, klass=nil}
   for at,name in pairs(names) do
-    col = push(i.all, (name:find"^[A-Z]" and Num or Sym)(name,at))
+    this = push(i.all, (name:find"^[A-Z]" and Num or Sym)(name,at))
     if not name:find"X$" then
-      if name:find"!$" then i.klass = col end
-      push(name:find"[!+-]$" and i.y or i.x, col) end end
+      if name:find"!$" then i.klass = this end
+      push(name:find"[!+-]$" and i.y or i.x, this) end end
   return i end
 
 ---------------------------------------------------------------------
@@ -113,8 +69,8 @@ function clone(i, rows,   j)
   return j end
 
 ---------------------------------------------------------------------
+local like,likes,likesMost
 
----------------------------------------------------------------------
 function like(i,x,prior,     v,tmp)
   if i.is=="Sym" then
     return ((i.has[x] or 0) + the.m*prior) / (i.n + the.m)  
@@ -123,37 +79,77 @@ function like(i,x,prior,     v,tmp)
     tmp = exp(-1*(x - i.mu)^2/(2*v)) / (2*pi*v) ^ 0.5
     return max(0,min(1, tmp + 1/BIG)) end end
 
-function loglike(i,row, nall, nh,          prior,f,l)
+function loglikes(i,row, nall, nh,          prior,f,l)
   prior = (#i.rows + the.k) / (nall + the.k*nh)
   f     = function(x) return l( like(x, row[x.at], prior) ) end
   l     = function(n) return n>0 and log(n) or 0 end
   return l(prior) + sum(i.cols.x, f) end
 
-function acquire(i,      acq,br,most,test,done,todo,y)
+function likesMost(i,      acq,y,b,r,br,init,test,train,done,todo,best,rest)
   acq  = acq or function(b,r) return b - r end
   y    = function(row) return ydist(i,row) end
-  b    = function(row) return loglike(best,row, #done, 2) end 
-  r    = function(row) return loglike(rest,row, #done, 2) end 
+  b    = function(row) return loglikes(best,row, #done, 2) end 
+  r    = function(row) return loglikes(rest,row, #done, 2) end 
   br   = function(row) return acq(b(row), r(row)) end
-  most = min(500, the.Test*#i.rows)
-  test,done,todo = {},{},{}
-  for j,row in pairs(shuffle(i.rows)) do
-    push((j <= the.start and done) or (j > most and test) or todo, row) end
+  train, test = split(shuffle(i.rows), min(1024, the.Test*#i.rows))
+  done, todo  = split(train, the.start) 
   while true do
     done = keysort(done, y) 
     if #done > the.Stop or #todo < 5 then break end 
-    best,rest = _clones(i, done, sqrt(#done)) 
+    best,rest = clone(i),clone(i)
+    for j,row in pairs(done) do col(j<=sqrt(#done) and best or rest, row) end
     todo = keysort(todo, br)                
-    for _ = 1,2 do
-      push(done, table.remove(todo, 1)) 
-      push(done, table.remove(todo, #todo)) end
+    for _=1,2 do push(done, pop(todo,1)); push(done, pop(todo)) end end
   return done, _acquires(test, b,r) end   
 
-function _clones(i,t,n,    u,v)
-  u,v={},{}
-  for j,x in pairs(t) do push(j<=n and u or v,x) end
-  return clone(i,u), clone(i,v) end
+---------------------------------------------------------------------
+function normal(mu,sd) 
+  return (mu or 0) + (sd or 1) * sqrt(-2*log(R())) * cos(2*pi*R()) end
 
+function push(t,x)  t[1+#t]=x; return x end
+function pop(t,n)   return table.remove(t,n) end
+
+function kap(t,f,   u) u={}; for k,v in pairs(t) do u[1+#u]=f(k,v)        end; return u end
+function map(t,f,   u) u={}; for _,v in pairs(t) do u[1+#u]=f(  v)        end; return u end
+function sum(t,f,   n) n=0;  for _,v in pairs(t) do n=n+(f and f(v) or v) end; return n end
+
+function lt(x) return function(a,b) return a[x] < b[x] end end
+function sort(t,fn) table.sort(t,fn); return t end
+
+function keysort(t,fn,     decorate,undecorate)
+  decorate   = function(x) return {fn(x),x} end
+  undecorate = function(x) return x[2] end
+  return map(sort(map(t,decorate),lt(1)), undecorate) end
+
+function shuffle(t,    k)
+  for j = #t,2,-1 do k=R(j); t[j],t[k] = t[k],t[j] end; return t end
+
+function split(t, n)
+  u,v={},{}; for j,x in pairs(t) do push(j<=n and u or v,x) end; return u,v end
+
+function o(x,     f,g,fmt) 
+  fmt= string.format
+  f= function(x) return #x>0 and map(x,o) or sort(kap(x,g)) end
+  g= function(k,v) if k ~= "is" then return fmt(":%s %s",k,o(x[k])) end end
+  return type(x)=="number" and fmt("%g",x) or  
+         type(x)~="table"  and tostring(x) or 
+         (x.is or "") .. "(" .. table.concat(f(x)," ") .. ")" end 
+
+function coerce(s,     other,trim) 
+  trim  = function(s) return s:match"^%s*(.-)%s*$" end
+  other = function(s) return s=="true" and true or s ~= "false" and s end
+  return math.tointeger(s) or tonumber(s) or other(trim(s)) end
+
+function csv(file,     src)
+  if file and file ~="-" then src=io.input(file) end
+  return function(     s,t)
+    s = io.read()
+    if s then
+      t={}
+      for s1 in s:gmatch"([^,]+)" do t[1+#t]=coerce(s1) end
+      return t 
+    else 
+      if src then io.close(src) end end end end
 
 ---------------------------------------------------------------------
 local ok={}
@@ -185,8 +181,8 @@ function ok.like(_, d)
 --     if not all then all = Data(row) else
 --       kl = row[#row]
 --       other[kl]  = other[kl] or cloneData(all)
---       addData(all, row)
---       addData(other[kl], row) end
+--       colData(all, row)
+--       colData(other[kl], row) end
 --     if #all.rows > 5 then xxx end end end  end
      
 ---------------------------------------------------------------------
@@ -197,3 +193,13 @@ if arg[0] =="b1.lua" then
     s = s:sub(3)
     if ok[s] and false==ok[s](arg[k+1]) then fails=fails+1 end end
   os.exit(fails) end 
+
+  -- # first things first. code something that runs a function names on command line
+  -- # code in the repl. sh is your repl
+  -- # code in spirts. 10 lines, run new test(s)
+  -- # N-1 globals is better than N
+  -- # malloc befre assign.
+  --
+  -- addX(i:X)
+  -- repair: find a place to move with hihest goal.
+  --         rule learnng = repair, results sorted by #changes.. how to average over all riles?
