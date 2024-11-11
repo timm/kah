@@ -1,4 +1,4 @@
-SHELL:= /bin/bash#
+itSHELL:= /bin/bash#
 .SILENT: # no output
 
 LOUD = \033[1;34m#
@@ -55,11 +55,11 @@ luas: kah.lua
 ~/tmp/%.pdf : %.lua  ## make pdf
 	@mkdir -p docs
 	@echo "pdf-ing $@ ... "
-	@a2ps -BjR    -q                        \
+	@a2ps -Bjr    -q                        \
 		--chars-per-line=100 \
 		--line-numbers=1                    \
 		--highlight-level=normal  \
-		--columns 2                 \
+		--columns 3                 \
 		--borders=no --pro=color  \
 		--right-footer="" --left-footer=""    \
 		--pretty-print=../etc/lua.ssh             \
