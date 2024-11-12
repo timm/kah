@@ -68,3 +68,8 @@ luas: kah.lua
 		-M letter -o $@.ps $<
 	@ps2pdf $@.ps $@; rm $@.ps
 	open $@
+
+
+eg1: ../../moot/optimize/[hcpm]*/*.csv
+	echo " "
+	$(foreach f, $^, (lua kah2.lua --guess $f &);)

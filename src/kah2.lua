@@ -123,7 +123,7 @@ function guessMostLiked(i) --> (Data) --> rows, XXX
     done = keysort(done, y) 
     if #done > the.Stop or #todo < 5 then break end 
     best,rest = clone(i),clone(i)
-    for j,row in pairs(done) do addCol(j<=sqrt(#done) and best or rest, row) end
+    for j,row in pairs(done) do addData(j<=sqrt(#done) and best or rest, row) end
     todo = keysort(todo, br)             
     for _=1,2 do push(done, pop(todo,1)); push(done, pop(todo)) end end
   return done[1] end   
@@ -166,7 +166,7 @@ function o(x,     f,g,fmt) --> (any) --> str
   fmt= string.format
   f= function(x) return #x>0 and map(x,o) or sort(kap(x,g)) end
   g= function(k,v) if k ~= "is" then return fmt(":%s %s",k,o(x[k])) end end
-  return type(x)=="number" and fmt("%g",x) or  
+  return type(x)=="number" and fmt("%.3g",x) or  
          type(x)~="table"  and tostring(x) or 
          (x.is or "") .. "(" .. table.concat(f(x)," ") .. ")" end 
 
@@ -189,6 +189,8 @@ function csv(file,     src) --> str --> func
 ---------------------------------------------------------------------
 local ok={}
 
+function ok.Stop(s) the.Stop=coerce(s) end
+function ok.seed(s) the.seed=coerce(s); math.randomseed(the.seed)  end
 function ok.train(s) the.train=s end
 
 function ok.o(_) print(o(the)) end
@@ -210,6 +212,19 @@ function ok.like(_, d)
     if j==1 or j%15==0 then
       print(j,loglikes(d,row,1000,2)) end end end
 
+function ok.guess(f,   d,asIs,toBe,rands,y,diff)
+  the.train = f
+  d=read(the.train)
+  asIs, toBe, rands=Num(), Num(),Num()
+  y = function(row) return ydist(d,row) end
+  diff=function(a,b) local x= abs(a.mu - b.mu)/(asIs.sd*.2); return x<1 and 0 or x end
+  map(d.rows, function(r) addCol(asIs, y(r)) end)
+  for _=1,20 do 
+     addCol(rands, (y(keysort(split(shuffle(d.rows),the.Stop),y)[1])))
+     addCol(toBe,ydist(d,guessMostLiked(d))) 
+     end
+   print( o{x=#d.cols.x, b4=asIs.mu,b=the.Stop,rand=rands.mu,diff=diff(toBe,rands),
+            lo=asIs.lo,guess=toBe.mu}, (f:gsub(".*/",""))) end
 -- function ok.bc()
 --   all, other = nil,nil
 --   for row in csv(the.train) do
