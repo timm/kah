@@ -102,14 +102,14 @@ local like,loglikes,guessMostLiked
 
 function like(i,x,prior,    v,tmp) --> (Col,atom,num) --> num
   if i.is=="Sym" then
-    return ((i.has[x] or 0) + the.m*prior) / (i.n + the.m)
+    return ((i.has[x] or 0) + the.bayes.m*prior) / (i.n + the.bayes.m)
   else
     v = i.sd^2 + 1/BIG
     tmp = exp(-1*(x - i.mu)^2/(2*v)) / (2*pi*v) ^ 0.5
     return max(0,min(1, tmp + 1/BIG)) end end
 
 function loglikes(i,row, nall, nh,    prior,f,l) --> (Data,rows,int,int) --> num
-  prior = (#i.rows + the.k) / (nall + the.k*nh)
+  prior = (#i.rows + the.bayes.k) / (nall + the.bayes.k*nh)
   f     = function(x) return l( like(x, row[x.at], prior) ) end
   l     = function(n) return n>0 and log(n) or 0 end
   return l(prior) + sum(i.cols.x, f) end
@@ -120,8 +120,8 @@ function guessBest(i) --> (Data) --> rows, XXX
   acq.exploit = function(b,r) return b / r end
   acq.explore = function(b,r) return (b + r)/abs(b-r) end
   acq.adapt   = function(b,r,    w) 
-                  w =  #done/the.guess.Stop
-                  return (acq.explore(b,r)*(1-w) + acq.exploit(b,r)*w)  end
+                  w =  1 - #done/the.guess.Stop
+                  return (b + r*w)/abs(b*w - r) end
   y    = function(row) return ydist(i,row) end
   b    = function(row) return exp(loglikes(best,row, #done, 2)) end 
   r    = function(row) return exp(loglikes(rest,row, #done, 2)) end 
@@ -232,7 +232,7 @@ function bootstrap(y0,z0,  bootstraps,conf)
   zhat   = map(z0, function(z1) return z1 - z.mu + x.mu end)
   n,b    = 0, (bootstraps or the.stats.wwBootstraps)
   for i=1, b do 
-    if obs(, N(many(yhat)), N((many(zhat))) ) > obs(y,z) then n = n + 1 end end
+    if obs(N(many(yhat)), N(many(zhat ))) > obs(y,z) then n = n + 1 end end
   return n / b >= (conf or the.stats.conf) end
 
 function scottKnot1(lo,hi,rank,somes, eps,rank)
@@ -301,12 +301,12 @@ function ok.guess(f,   d,asIs,toBe,rands,y,diff,cliffs)
   go2lo=function(a) local x= abs(a.mu - asIs.lo)/(asIs.sd*cliffs); return x<1 and 0 or 1 end
   map(d.rows, function(r) addCol(asIs, y(r)) end)
   for _=1,20 do 
-     addCol(rands, (y(keysort(split(shuffle(d.rows),the.Stop),y)[1])))
+     addCol(rands, (y(keysort(split(shuffle(d.rows),the.guess.Stop),y)[1])))
      train,test = guessBest(d)
      addCol(toBe,ydist(d,train))
      addCol(after,ydist(d,test))
      end
-   print( o{x=#d.cols.x, b4=asIs.mu,b=the.Stop,rand=rands.mu,diff=diff(toBe,rands),
+   print( o{x=#d.cols.x, b4=asIs.mu,b=the.guess.Stop,rand=rands.mu,diff=diff(toBe,rands),
             height=go2lo(toBe), lo=asIs.lo,guess=toBe.mu}, (f:gsub(".*/",""))) end
 -- function ok.bc()
 --   all, other = nil,nil
