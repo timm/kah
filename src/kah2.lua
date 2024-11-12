@@ -6,30 +6,30 @@ local the = {
   rseed = 1234567891, 
   start = 4,
   Stop  = 30,
-  train = "../../data/auto93.csv",
+  train = "../../moot/optimize/misc/auto93.csv",
   Test  = 0.33}
 
 ---------------------------------------------------------------------
 local BIG = 1E32
 local coerce,csv,kap,keysort,lt,map,normal
-local pop,push,o,shuffle,sort,split,sum
+local o,pop,push,shuffle,sort,split,sum
 local abs, cos,exp,log = math.abs, math.cos, math.exp, math.log
 local max,min,pi,R,sqrt = math.max, math.min, math.pi, math.random, math.sqrt
 
 -------------------------------------------------------------------
 local Num,Sym,Data,Cols
 
-function Num(name,at) 
+function Num(name,at) --> (str, int) --> Num
   return {is="Num", name=name, at=at, n=0, sd=0, mu=0, m2=0, 
           lo=BIG, hi=-BIG, goal = (name or ""):find"-$" and 0 or 1} end
 
-function Sym(name,at) 
+function Sym(name,at) --> (str, int) --> Sym
   return {is="Sym", name=name, at=at, n=0, has={}, mode=0, most=0} end
 
-function Data(names)
+function Data(names) --> ( [str] ) --> Data
   return {is="Data",rows={}, cols=Cols(names)} end
 
-function Cols(names,    i,this)
+function Cols(names,    i,this) --> ( [str] ) --> Cols
   i = {is="Cols", names=names, all={}, x={}, y={}, klass=nil}
   for at,name in pairs(names) do
     this = push(i.all, (name:find"^[A-Z]" and Num or Sym)(name,at))
@@ -41,7 +41,7 @@ function Cols(names,    i,this)
 ---------------------------------------------------------------------
 local addCol,addData,read,clone
 
-function addCol(i,x,     d) --(i:NUM|SYM, x:atom): nil
+function addCol(i,x,     d) --> (NUM|SYM, x:atom) --> nil
   if x=="?" then return end
   i.n = i.n + 1
   if i.is=="Sym" then
@@ -55,25 +55,23 @@ function addCol(i,x,     d) --(i:NUM|SYM, x:atom): nil
     i.hi = max(x, i.hi)
     i.lo = min(x, i.lo) end  end
 
-function addData(i,row)
+function addData(i,row) --> (DATA, row) --> nil
   for k,v in pairs(row) do addCol(i.cols.all[k], v) end
   push(i.rows, row) end
 
-function read(file,   i)
+function read(file,   i) --> (str) --> Data
   for row in csv(file) do
     if i then addData(i,row) else i=Data(row) end end 
   return i end
 
-function clone(i, rows,   j) --> Data1,[row] --> Data2
+function clone(i, rows,   j) --> (Data1, [row]) --> Data2
   j = Data(i.cols.names)
   for _,row in pairs(rows or {}) do addData(j, row) end
   return j end
 ---------------------------------------------------------------------
-function ydist(i,row,  d) --> Data, row --> num
-  d = function(y) return (abs(norm(y,row[y.at]) - y.goal))^the.p end
-  return (sum(i.cols.y,d) /#i.cols.y)^(1/the.p) end
+local ydist, xdist, dist, neighbors, norm
 
-function dist(i,a,b) --> Col, atom, atom --> float
+function dist(i,a,b) --> (Col, atom, atom) --> num
   if a=="?" and b=="?" then return 1 end
   if i.is== "Sym" then return (a==b and 0 or 1) end
   a,b = norm(i,a), norm(i,b)
@@ -81,31 +79,39 @@ function dist(i,a,b) --> Col, atom, atom --> float
   b = b ~= "?" and b or (a<0.5 and 1 or 0)
   return abs(a-b) end
 
-function xdist(i,row1,row2,    d,n) --> [row] ---> num
+function xdist(i,row1,row2,    d,n) --> (Data, row, row) ---> num
   d = function(x) return dist(i,row1[x.at], row2[x.at])^the.p  end
   return (sum(i.cols.x, d) / #i.cols.x) ^ (1/the.p) end
 
-function neighbors(i,row,  rows) --> DATA,row,[row]? --> [row]
+function ydist(i,row,  d) --> (Data, row) --> num
+  d = function(y) return (abs(norm(y,row[y.at]) - y.goal))^the.p end
+  return (sum(i.cols.y,d) /#i.cols.y)^(1/the.p) end
+
+function neighbors(i,row,  rows) --> (DATA, row, [row]?) --> [row]
   return keysort(rows or i.rows, function(r) return xdist(i,r,row) end) end
 
----------------------------------------------------------------------
-local like,likes,likesMost
+function norm(i,x) --> (COL, num) -> num
+  return x=="?" and x or (x - i.lo)/(i.hi - i.lo + 1/BIG) end
 
-function like(i,x,prior,     v,tmp)
+---------------------------------------------------------------------
+local like,loglikes,guessMostLiked
+
+function like(i,x,prior,    v,tmp) --> (Col,atom,num) --> num
   if i.is=="Sym" then
-    return ((i.has[x] or 0) + the.m*prior) / (i.n + the.m)  
+    return ((i.has[x] or 0) + the.m*prior) / (i.n + the.m)
   else
     v = i.sd^2 + 1/BIG
     tmp = exp(-1*(x - i.mu)^2/(2*v)) / (2*pi*v) ^ 0.5
     return max(0,min(1, tmp + 1/BIG)) end end
 
-function loglikes(i,row, nall, nh,          prior,f,l)
+function loglikes(i,row, nall, nh,    prior,f,l) --> (Data,rows,int,int) --> num
   prior = (#i.rows + the.k) / (nall + the.k*nh)
   f     = function(x) return l( like(x, row[x.at], prior) ) end
   l     = function(n) return n>0 and log(n) or 0 end
   return l(prior) + sum(i.cols.x, f) end
 
-function guessMostLiked(i,      acq,y,b,r,br,init,test,train,done,todo,best,rest)
+function guessMostLiked(i) --> (Data) --> rows, XXX
+  local acq,y,b,r,br,init,test,train,done,todo,best,rest
   acq  = acq or function(b,r) return b - r end
   y    = function(row) return ydist(i,row) end
   b    = function(row) return loglikes(best,row, #done, 2) end 
@@ -117,37 +123,46 @@ function guessMostLiked(i,      acq,y,b,r,br,init,test,train,done,todo,best,rest
     done = keysort(done, y) 
     if #done > the.Stop or #todo < 5 then break end 
     best,rest = clone(i),clone(i)
-    for j,row in pairs(done) do col(j<=sqrt(#done) and best or rest, row) end
-    todo = keysort(todo, br)                
+    for j,row in pairs(done) do addCol(j<=sqrt(#done) and best or rest, row) end
+    todo = keysort(todo, br)             
     for _=1,2 do push(done, pop(todo,1)); push(done, pop(todo)) end end
-  return done, _acquires(test, b,r) end   
+  return done[1] end   
 
 ---------------------------------------------------------------------
-function normal(mu,sd) 
+function normal(mu,sd) --> (num, num) --> 0..1
   return (mu or 0) + (sd or 1) * sqrt(-2*log(R())) * cos(2*pi*R()) end
 
-function push(t,x)  t[1+#t]=x; return x end
+function push(t,x) --> (list,any) --> any
+    t[1+#t]=x; return x end
 function pop(t,n)   return table.remove(t,n) end
 
-function kap(t,f,   u) u={}; for k,v in pairs(t) do u[1+#u]=f(k,v)        end; return u end
-function map(t,f,   u) u={}; for _,v in pairs(t) do u[1+#u]=f(  v)        end; return u end
-function sum(t,f,   n) n=0;  for _,v in pairs(t) do n=n+(f and f(v) or v) end; return n end
+function kap(t,f,   u) --> (list,func) --> t
+  u={}; for k,v in pairs(t) do u[1+#u]=f(k,v) end; return u end
 
-function lt(x) return function(a,b) return a[x] < b[x] end end
-function sort(t,fn) table.sort(t,fn); return t end
+function map(t,f,   u) --> (list,func) --> t
+  u={}; for _,v in pairs(t) do u[1+#u]=f(  v) end; return u end
 
-function keysort(t,fn,     decorate,undecorate)
-  decorate   = function(x) return {fn(x),x} end
-  undecorate = function(x) return x[2] end
+function sum(t,f,   n) --> (list,func) --> t
+  n=0;  for _,v in pairs(t) do n=n+f(v) end; return n end
+
+function lt(x) --> (atom) --> func
+  return function(a,b) return a[x] < b[x] end end
+
+function sort(t,fn) --> (list,func) --> list
+  table.sort(t,fn); return t end
+
+function keysort(t,fn) --> (list,func) --> list
+  local decorate   = function(x) return {fn(x),x} end
+  local undecorate = function(x) return x[2] end
   return map(sort(map(t,decorate),lt(1)), undecorate) end
 
-function shuffle(t,    k)
+function shuffle(t,    k) --> (list) --> t
   for j = #t,2,-1 do k=R(j); t[j],t[k] = t[k],t[j] end; return t end
 
-function split(t, n)
+function split(t, n,     u,v) --> (list)
   u,v={},{}; for j,x in pairs(t) do push(j<=n and u or v,x) end; return u,v end
 
-function o(x,     f,g,fmt) 
+function o(x,     f,g,fmt) --> (any) --> str
   fmt= string.format
   f= function(x) return #x>0 and map(x,o) or sort(kap(x,g)) end
   g= function(k,v) if k ~= "is" then return fmt(":%s %s",k,o(x[k])) end end
@@ -155,12 +170,12 @@ function o(x,     f,g,fmt)
          type(x)~="table"  and tostring(x) or 
          (x.is or "") .. "(" .. table.concat(f(x)," ") .. ")" end 
 
-function coerce(s,     other,trim) 
+function coerce(s,     other,trim) --> string --> atom
   trim  = function(s) return s:match"^%s*(.-)%s*$" end
   other = function(s) return s=="true" and true or s ~= "false" and s end
   return math.tointeger(s) or tonumber(s) or other(trim(s)) end
 
-function csv(file,     src)
+function csv(file,     src) --> str --> func
   if file and file ~="-" then src=io.input(file) end
   return function(     s,t)
     s = io.read()
@@ -189,11 +204,11 @@ function ok.data(_, d)
   d = read(the.train) 
   for _,col in pairs(d.cols.all) do print(o(col)) end end
 
-function ok.like(_, d)
+function ok.like(_, d) 
   d = read(the.train) 
   for j,row in pairs(d.rows) do 
     if j==1 or j%15==0 then
-      print(j,loglikeData(d,row,1000,2)) end end end
+      print(j,loglikes(d,row,1000,2)) end end end
 
 -- function ok.bc()
 --   all, other = nil,nil
@@ -206,7 +221,7 @@ function ok.like(_, d)
 --     if #all.rows > 5 then xxx end end end  end
      
 ---------------------------------------------------------------------
-if arg[0] =="b1.lua" then 
+if arg[0] =="kah2.lua" then 
   math.randomseed(the.rseed)
   local fails = 0
   for k,s in pairs(arg) do
