@@ -1,5 +1,5 @@
 local the = {
-  acquire = 500,
+  enough = 500,
   k     = 1, 
   m     = 2,
   p     = 2,
@@ -117,7 +117,7 @@ function guessMostLiked(i) --> (Data) --> rows, XXX
   b    = function(row) return loglikes(best,row, #done, 2) end 
   r    = function(row) return loglikes(rest,row, #done, 2) end 
   br   = function(row) return acq(b(row), r(row)) end
-  train, test = split(shuffle(i.rows), min(1024, the.Test*#i.rows))
+  train, test = split(shuffle(i.rows), min(the.enough, the.Test*#i.rows))
   done, todo  = split(train, the.start) 
   while true do
     done = keysort(done, y) 
