@@ -69,7 +69,19 @@ luas: kah.lua
 	@ps2pdf $@.ps $@; rm $@.ps
 	open $@
 
+go=guess
+acq=explore
+eg0: ../../moot/optimize/[m]*/*.csv
+	$(foreach f, $^, (lua kah2.lua --acquire $(acq) --$(go) $f &);)
 
 eg1: ../../moot/optimize/[hcpm]*/*.csv
-	echo " "
-	$(foreach f, $^, (lua kah2.lua --guess $f &);)
+	$(foreach f, $^, (lua kah2.lua --acquire $(acq) --$(go) $f &);)
+
+report1=gawk '{OFS=",|";\
+		print int(100*($$4-$$8)/($$4+0.000001)),$$4,$$8, $$10 ? "" : "y", $$6 ? "" : "y",$$NF \
+		}' | sort -n | column -s,  -t | sed 's/\|/\| /g'
+
+rq1:
+	echo "(x-y)/x | x=asIs | y=toBe | atLowest | asRand"
+	$(MAKE) go=guess eg1|  $(report1)
+

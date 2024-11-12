@@ -1,17 +1,21 @@
 local the = {
-  enough = 500,
-  k     = 1, 
-  m     = 2,
+  guess ={ acquire= "exploit",
+           enough = 50000000,
+           start = 4,
+           Stop  = 30},
+  bayes  = {k     = 1, 
+            m     = 2},
+  stats     = {bootstraps=256,
+            delta = 0.197,
+            conf = 0.05},
   p     = 2,
   rseed = 1234567891, 
-  start = 4,
-  Stop  = 30,
   train = "../../moot/optimize/misc/auto93.csv",
   Test  = 0.33}
 
 ---------------------------------------------------------------------
 local BIG = 1E32
-local coerce,csv,kap,keysort,lt,map,normal
+local any,coerce,csv,kap,keysort,lt,many,map,normal
 local o,pop,push,shuffle,sort,split,sum
 local abs, cos,exp,log = math.abs, math.cos, math.exp, math.log
 local max,min,pi,R,sqrt = math.max, math.min, math.pi, math.random, math.sqrt
@@ -110,23 +114,28 @@ function loglikes(i,row, nall, nh,    prior,f,l) --> (Data,rows,int,int) --> num
   l     = function(n) return n>0 and log(n) or 0 end
   return l(prior) + sum(i.cols.x, f) end
 
-function guessMostLiked(i) --> (Data) --> rows, XXX
+function guessBest(i) --> (Data) --> rows, XXX
   local acq,y,b,r,br,init,test,train,done,todo,best,rest
-  acq  = acq or function(b,r) return b - r end
+  acq  = {}
+  acq.exploit = function(b,r) return b / r end
+  acq.explore = function(b,r) return (b + r)/abs(b-r) end
+  acq.adapt   = function(b,r,    w) 
+                  w =  #done/the.guess.Stop
+                  return (acq.explore(b,r)*(1-w) + acq.exploit(b,r)*w)  end
   y    = function(row) return ydist(i,row) end
-  b    = function(row) return loglikes(best,row, #done, 2) end 
-  r    = function(row) return loglikes(rest,row, #done, 2) end 
-  br   = function(row) return acq(b(row), r(row)) end
-  train, test = split(shuffle(i.rows), min(the.enough, the.Test*#i.rows))
-  done, todo  = split(train, the.start) 
+  b    = function(row) return exp(loglikes(best,row, #done, 2)) end 
+  r    = function(row) return exp(loglikes(rest,row, #done, 2)) end 
+  br   = function(row) return acq[the.guess.acquire](b(row), r(row)) end
+  train, test = split(shuffle(i.rows), min(the.guess.enough, the.Test*#i.rows))
+  done, todo  = split(train, the.guess.start) 
   while true do
     done = keysort(done, y) 
-    if #done > the.Stop or #todo < 5 then break end 
+    if #done > the.guess.Stop or #todo < 5 then break end 
     best,rest = clone(i),clone(i)
     for j,row in pairs(done) do addData(j<=sqrt(#done) and best or rest, row) end
     todo = keysort(todo, br)             
     for _=1,2 do push(done, pop(todo,1)); push(done, pop(todo)) end end
-  return done[1] end   
+  return done[1], keysort(test,br)[#test] end   
 
 ---------------------------------------------------------------------
 function normal(mu,sd) --> (num, num) --> 0..1
@@ -159,6 +168,12 @@ function keysort(t,fn) --> (list,func) --> list
 function shuffle(t,    k) --> (list) --> t
   for j = #t,2,-1 do k=R(j); t[j],t[k] = t[k],t[j] end; return t end
 
+function any(t)  
+  return t[R(#t)] end
+
+function many(t,n,  u) 
+  u={}; for i=1,(n or #t) do u[i] = any(t) end; return u end
+
 function split(t, n,     u,v) --> (list)
   u,v={},{}; for j,x in pairs(t) do push(j<=n and u or v,x) end; return u,v end
 
@@ -166,7 +181,7 @@ function o(x,     f,g,fmt) --> (any) --> str
   fmt= string.format
   f= function(x) return #x>0 and map(x,o) or sort(kap(x,g)) end
   g= function(k,v) if k ~= "is" then return fmt(":%s %s",k,o(x[k])) end end
-  return type(x)=="number" and fmt("%.3g",x) or  
+  return type(x)=="number" and fmt("%.2g",x) or  
          type(x)~="table"  and tostring(x) or 
          (x.is or "") .. "(" .. table.concat(f(x)," ") .. ")" end 
 
@@ -186,10 +201,74 @@ function csv(file,     src) --> str --> func
     else 
       if src then io.close(src) end end end end
 
+function Some(t,txt,    i) 
+  i= {is="Some", txt=txt, rank-0, has={}, num=Num(), n=0, mu=0} 
+  for _,x in pairs(t or {}) do addSome(i,x) end
+  return i end
+
+function addSome(i, x)
+  addCol(i.num, x)
+  push(i.has, x) 
+  i.mu = i.num.mu
+  i.n  = i.num.n end
+
+function cliffs(xs,ys,  delta)
+  local lt,gt,n = 0,0,0
+  for _,x in pairs(xs) do
+     for _,y in pairs(ys) do
+       n = n + 1
+       if y > x then gt = gt + 1 end
+       if y < x then lt = lt + 1 end end end
+  return abs(gt - lt)/n <= (delta or the.stats.delta) end -- 0.195 
+
+-- Taken from non-parametric significance test From Introduction to Bootstrap,
+-- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
+function bootstrap(y0,z0,  bootstraps,conf)
+  local x,y,z,yhat,zhat,n,this,that,b,obs
+  local obs= function(i,j) return abs(j.mu - k.mu) / ((1E-32 + j.sd^2/j.n + k.sd^2/k.n)^.5) end
+  local N= function(t,  n) n=n or Num(); for _,x in pairs(t) do addCol(n,x) end; return n end
+  z,y,x  = N(z0), N(y0), N(y0, N(z0))
+  yhat   = map(y0, function(y1) return y1 - y.mu + x.mu end)
+  zhat   = map(z0, function(z1) return z1 - z.mu + x.mu end)
+  n,b    = 0, (bootstraps or the.stats.wwBootstraps)
+  for i=1, b do 
+    if obs(, N(many(yhat)), N((many(zhat))) ) > obs(y,z) then n = n + 1 end end
+  return n / b >= (conf or the.stats.conf) end
+
+function scottKnot1(lo,hi,rank,somes, eps,rank)
+  sum0,n0, sum1,n1 = 0,0,0,0
+  for j=lo,li do
+     some = somes[j]
+     sum1 = sum1 + some.n*some.mu
+     n1   = n1 + some.n end
+  n= n1; mu = sum1/n1
+  for j,num in pairs(some) do
+     some = somes[j]
+     sum0 = sum0 + some.n*some.mu; n1 = n0 + some.n; mu0 = sum0/n0 
+     sum1 = sum1 - some.n*some.mu; n1 = n1 - some.n; mu1 = sum1/n1 
+     now  = (n1 * (mu0 - mu)^2 + n2 * (mu1 - mu)^2 ) / n
+     if now > most then
+        diff,most,cut = now,j,mu1-mu0 end  end 
+  if cut and diff > eps then
+    ls,rs= {},{}
+    for j=lo,hi do
+      for _,x in pairs(somes[j].has) do push(j <=cut and ls or rs, x) end end
+    if not (cliffs(ls,rs) and bootstraps(ls,rs)) then
+      rank = scottKnot1(lo,cut,rank,somes,eps,rank) + 1
+      rank = scottKnot1(cut+1,hi, rank,some,eps,rank)
+      return rank end end
+  for _,some in pairs(somes) do some.rank = rank end 
+  return rank end
+
+function scottKnot(some, eps)
+  return scottKnot1(1,#somes,1,sort(somes,lt"mu"), eps) end
+
+
 ---------------------------------------------------------------------
 local ok={}
 
-function ok.Stop(s) the.Stop=coerce(s) end
+function ok.acquire(s) the.guess.acquire=s end
+function ok.Stop(s) the.guess.Stop=coerce(s) end
 function ok.seed(s) the.seed=coerce(s); math.randomseed(the.seed)  end
 function ok.train(s) the.train=s end
 
@@ -212,19 +291,23 @@ function ok.like(_, d)
     if j==1 or j%15==0 then
       print(j,loglikes(d,row,1000,2)) end end end
 
-function ok.guess(f,   d,asIs,toBe,rands,y,diff)
+function ok.guess(f,   d,asIs,toBe,rands,y,diff,cliffs)
   the.train = f
+  cliffs=0.35
   d=read(the.train)
-  asIs, toBe, rands=Num(), Num(),Num()
+  asIs, toBe, after, rands=Num(), Num(),Num(),Num()
   y = function(row) return ydist(d,row) end
-  diff=function(a,b) local x= abs(a.mu - b.mu)/(asIs.sd*.2); return x<1 and 0 or x end
+  diff=function(a,b) local x= abs(a.mu - b.mu)/(asIs.sd*cliffs); return x<1 and 0 or x end
+  go2lo=function(a) local x= abs(a.mu - asIs.lo)/(asIs.sd*cliffs); return x<1 and 0 or 1 end
   map(d.rows, function(r) addCol(asIs, y(r)) end)
   for _=1,20 do 
      addCol(rands, (y(keysort(split(shuffle(d.rows),the.Stop),y)[1])))
-     addCol(toBe,ydist(d,guessMostLiked(d))) 
+     train,test = guessBest(d)
+     addCol(toBe,ydist(d,train))
+     addCol(after,ydist(d,test))
      end
    print( o{x=#d.cols.x, b4=asIs.mu,b=the.Stop,rand=rands.mu,diff=diff(toBe,rands),
-            lo=asIs.lo,guess=toBe.mu}, (f:gsub(".*/",""))) end
+            height=go2lo(toBe), lo=asIs.lo,guess=toBe.mu}, (f:gsub(".*/",""))) end
 -- function ok.bc()
 --   all, other = nil,nil
 --   for row in csv(the.train) do
