@@ -73,6 +73,16 @@ function clone(i, rows,   j) --> (Data1, [row]) --> Data2
   j = Data(i.cols.names)
   for _,row in pairs(rows or {}) do addData(j, row) end
   return j end
+
+---------------------------------------------------------------------
+local norm,pooledSdNum
+
+function norm(i,x) --> (COL, num) -> num
+  return x=="?" and x or (x - i.lo)/(i.hi - i.lo + 1/BIG) end
+
+function pooledSdNum(i,j)
+  return sqrt(((i.n-1)*i.sd^2 + (j.n-1)*j.sd^2)/(i.n+j.n-2)) end 
+
 ---------------------------------------------------------------------
 local ydist, xdist, dist, neighbors, norm
 
@@ -95,11 +105,8 @@ function ydist(i,row,  d) --> (Data, row) --> num
 function neighbors(i,row,  rows) --> (DATA, row, [row]?) --> [row]
   return keysort(rows or i.rows, function(r) return xdist(i,r,row) end) end
 
-function norm(i,x) --> (COL, num) -> num
-  return x=="?" and x or (x - i.lo)/(i.hi - i.lo + 1/BIG) end
-
 ---------------------------------------------------------------------
-local like,loglikes,guessMostLiked
+local like,loglikes,guessBest
 
 function like(i,x,prior,    v,tmp) --> (Col,atom,num) --> num
   if i.is=="Sym" then
@@ -116,7 +123,7 @@ function loglikes(i,row, nall, nh,    prior,f,l) --> (Data,rows,int,int) --> num
   return l(prior) + sum(i.cols.x, f) end
 
 function guessBest(i) --> (Data) --> rows, XXX
-  local acq,y,b,r,br,init,test,train,done,todo,best,rests,stop
+  local acq,y,b,r,br,init,test,train,done,todo,best,rest,stop
   stop = the.guess.stop
   acq= {
     exploit = function(b,r) return b / (r + 1/BIG) end,
@@ -202,8 +209,41 @@ function csv(file,     src) --> str --> func
     else 
       if src then io.close(src) end end end end
 
+-------------------------------------------------------------------------------
+local same, cliffs, bootstrap
+function same(x,y)
+  return cliffs(x,y) and bootstrap(x,y) end
+
+function cliffs(xs,ys,  delta)
+  local lt,gt,n = 0,0,0
+  for _,x in pairs(xs) do
+      for _,y in pairs(ys) do
+        n = n + 1
+        if y > x then gt = gt + 1 end
+        if y < x then lt = lt + 1 end end end
+  return abs(gt - lt)/n <= (delta or the.stats.delta) end -- 0.195 
+      
+-- Taken from non-parametric significance test From Introduction to Bootstrap,
+-- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
+-- Checks how rare are  the observed differences between samples of this data.
+-- If not rare, then these sets are the same.
+function bootstrap(y0,z0,  bootstraps,conf)
+  local x,y,z,yhat,zhat,n,b
+  local obs= function(j,k) return abs(j.mu - k.mu) / ((1E-32 + j.sd^2/j.n + k.sd^2/k.n)^.5) end
+  local N= function(t,  n) n=n or Num(); for _,x in pairs(t) do addCol(n,x) end; return n end
+  z,y,x  = N(z0), N(y0), N(y0, N(z0))
+  yhat   = map(y0, function(y1) return y1 - y.mu + x.mu end)
+  zhat   = map(z0, function(z1) return z1 - z.mu + x.mu end)
+  n,b    = 0, (bootstraps or the.stats.bootstraps)
+  for i=1, b do 
+    if obs(N(many(yhat)), N(many(zhat ))) > obs(y,z) then n = n + 1 end end
+  return n / b >= (conf or the.stats.conf) end
+
+-------------------------------------------------------------------------------
+local Some, addSome, mergeSome, mergesSome
+
 function Some(t,txt,    i) 
-  i= {is="Some", txt=txt, rank-0, has={}, num=Num()} 
+  i= {is="Some", txt=txt, rank=0, has={}, num=Num()} 
   for _,x in pairs(t or {}) do addSome(i,x) end
   return i end
 
@@ -211,55 +251,28 @@ function addSome(i, x)
   addCol(i.num, x)
   push(i.has, x) end
 
-function combineSome(i,j) --> (Some,Some) --> Some
+function mergeSome(i,j,     k) --> (Some,Some) --> Some
   k=Some(i.all, i.txt)
-  for _,t in pairs{i.has,j,has} do
+  for _,t in pairs{i.has,j.has} do
     for _,x in pairs(t) do
        addSome(k, x) end end
   return k end
 
-function sameSome(i,j)
-  return cliffs(i.has,j.has) and bootstrap(i.has,j.has) end
-
-function rankSome(i,somes,eps) --> i:Num
-  t={somes[1]}
-  t[1].rank=1
+function mergesSome(i,somes,eps,   t) --> i:Num
   for j,some in pairs(somes) do
-    if j > 1 then
-      if   abs(some.num.mu - t[#t].num.mu) > eps and not sameSome(same,t[#t]) 
-      then push(t,some) 
-      else t[#t] = combineSome(some,t[#t]) end 
-      some.rank = #t end end end
-
-function cliffs(xs,ys,  delta)
-  local lt,gt,n = 0,0,0
-  for _,x in pairs(xs) do
-     for _,y in pairs(ys) do
-       n = n + 1
-       if y > x then gt = gt + 1 end
-       if y < x then lt = lt + 1 end end end
-  return abs(gt - lt)/n <= (delta or the.stats.delta) end -- 0.195 
-
--- Taken from non-parametric significance test From Introduction to Bootstrap,
--- Efron and Tibshirani, 1993, chapter 20. https://doi.org/10.1201/9780429246593
-function bootstrap(y0,z0,  bootstraps,conf)
-  local x,y,z,yhat,zhat,n,this,that,b,obs
-  local obs= function(i,j) return abs(j.mu - k.mu) / ((1E-32 + j.sd^2/j.n + k.sd^2/k.n)^.5) end
-  local N= function(t,  n) n=n or Num(); for _,x in pairs(t) do addCol(n,x) end; return n end
-  z,y,x  = N(z0), N(y0), N(y0, N(z0))
-  yhat   = map(y0, function(y1) return y1 - y.mu + x.mu end)
-  zhat   = map(z0, function(z1) return z1 - z.mu + x.mu end)
-  n,b    = 0, (bootstraps or the.stats.wwBootstraps)
-  for i=1, b do 
-    if obs(N(many(yhat)), N(many(zhat ))) > obs(y,z) then n = n + 1 end end
-  return n / b >= (conf or the.stats.conf) end
+    if t 
+    then if abs(some.num.mu - t[#t].num.mu) > eps and not same(some.has,t[#t].has) 
+         then push(t,some) 
+         else t[#t] = mergeSome(some, t[#t]) end 
+    else t={some} end
+    some.rank = #t end end
 
 ---------------------------------------------------------------------
 local ok={}
 
 function ok.acquire(s) the.guess.acquire=s end
 function ok.Stop(s) the.guess.stop=coerce(s) end
-function ok.seed(s) the.seed=coerce(s); math.randomseed(the.seed)  end
+function ok.seed(s) the.seed=coerce(s); math.randomseed(the.rseed)  end
 function ok.train(s) the.train=s end
 
 function ok.o(_) print(o(the)) end
@@ -281,7 +294,22 @@ function ok.like(_, d)
     if j==1 or j%15==0 then
       print(j,loglikes(d,row,1000,2)) end end end
 
-function ok.guess(f,   d,asIs,toBe,rands,y,diff,cliffs)
+function ok.stats(   r,t,u,d,y,n1,n2,zy)
+  local N= function(t,  n) n=n or Num(); for _,x in pairs(t) do addCol(n,x) end; return n end
+  zy = function(s) return s and "y" or "." end
+  d,r= 1,100
+  while d< 1.2 do
+    t={}; for i=1,r do t[1+#t] = normal(10,2)^2 end 
+    u={}; for i,x in pairs(t) do u[i] = x*d end
+    d=d*1.01
+    n1,n2 = N(t), N(u)
+    print(
+      string.format("%.3f\t%s\t%s\t%s", 
+                     d, y(cliffs(t,u)), y(bootstrap(t,u)), 
+                        y(abs(n1.mu - n2.mu) < .35*n1:pooledSd(n2)))) end end
+
+
+function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
   the.train = f
   cliffs=0.35
   d=read(the.train)
@@ -292,7 +320,7 @@ function ok.guess(f,   d,asIs,toBe,rands,y,diff,cliffs)
   map(d.rows, function(r) addCol(asIs, y(r)) end)
   for _=1,20 do 
      addCol(rands, (y(keysort(split(shuffle(d.rows),the.guess.stop),y)[1])))
-     train,test = guessBest(d)
+     local train,test = guessBest(d)
      addCol(toBe,ydist(d,train))
      addCol(after,ydist(d,test))
      end
