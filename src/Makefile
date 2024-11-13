@@ -77,11 +77,13 @@ eg0: ../../moot/optimize/*/auto93.csv
 	$(foreach f, $^, (lua kah2.lua --acquire $(acq) --$(go) $f );)
 
 eg1: ../../moot/optimize/[hcpm]*/*.csv
-	$(foreach f, $^, (lua kah2.lua --Stop $(Stop) --acquire $(acq) --$(go) $f &);)
+	$(foreach f, $^, (lua kah2.lua --Stop $(Stop) --acquire $(acq) --$(go) $f &);) 
 
-report1=gawk 'BEGIN { OFS=",| "; print("\n(x-y)/x,| x=asIs,| y=toBe,| atLowest,| asRand,| file")} \
-		{print  int(100*($$4-$$8)/($$4+0.000001)),$$4,$$8, $$10 ? "" : "y", $$6 ? "" : "y",$$NF \
-		}' | sort -t, -nk2 | column -s,  -t 
+report1=gawk 'BEGIN { \
+   OFS=",| "; \
+   print("\n\n(x-y)/x,| x=asIs,| y=toBe,| atLowest,| asRand,| file")} \
+	{print int(100*($$4-$$8)/($$4+0.000001)),$$4,$$8, $$10 ? "" : "y", $$6 ? "" : "y",$$NF \
+	}' | sort -t, -nk2 | column -s,  -t 
 
 #| sed 's/\|/\| /g' 
 
@@ -92,4 +94,3 @@ rq1:
 	mkdir -p ~/tmp
 	$(MAKE) go=guess eg1 | tee ~/tmp/$@  
 	cat ~/tmp/$@ | $(report1)
-

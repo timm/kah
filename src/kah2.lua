@@ -115,22 +115,22 @@ function loglikes(i,row, nall, nh,    prior,f,l) --> (Data,rows,int,int) --> num
   return l(prior) + sum(i.cols.x, f) end
 
 function guessBest(i) --> (Data) --> rows, XXX
-  local acq,y,b,r,br,init,test,train,done,todo,best,rest
-  acq  = {}
-  acq.exploit = function(b,r) return b / r end
-  acq.explore = function(b,r) return (b + r)/abs(b-r) end
-  acq.adapt   = function(b,r,    w) 
-                  w =  1 - #done/the.guess.Stop
-                  return (b + r*w)/abs(b*w - r) end
-  y    = function(row) return ydist(i,row) end
-  b    = function(row) return exp(loglikes(best,row, #done, 2)) end 
-  r    = function(row) return exp(loglikes(rest,row, #done, 2)) end 
-  br   = function(row) return acq[the.guess.acquire](b(row), r(row)) end
+  local acq,y,b,r,br,init,test,train,done,todo,best,rests,stop
+  stop = the.guess.Stop
+  acq= {
+    exploit = function(b,r) return b / r end,
+    explore = function(b,r) return (b + r)/abs(b-r) end,
+    adapt   = function(b,r) local w = 1 - #done/stop; return (b+r*w)/abs(b*w-r) end
+  }
+  y         = function(row) return ydist(i,row) end
+  b         = function(row) return exp(loglikes(best, row, #done, 2)) end 
+  r         = function(row) return exp(loglikes(rest, row, #done, 2)) end 
+  br        = function(row) return acq[the.guess.acquire](b(row), r(row)) end
   train, test = split(shuffle(i.rows), min(the.guess.enough, the.Test*#i.rows))
   done, todo  = split(train, the.guess.start) 
   while true do
     done = keysort(done, y) 
-    if #done > the.guess.Stop or #todo < 5 then break end 
+    if #done > stop or #todo < 5 then break end 
     best,rest = clone(i),clone(i)
     for j,row in pairs(done) do addData(j<=sqrt(#done) and best or rest, row) end
     todo = keysort(todo, br)             
