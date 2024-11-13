@@ -221,6 +221,16 @@ function combineSome(i,j) --> (Some,Some) --> Some
 function sameSome(i,j)
   return cliffs(i.has,j.has) and bootstrap(i.has,j.has) end
 
+function rankSome(i,somes,eps) --> i:Num
+  t={somes[1]}
+  t[1].rank=1
+  for j,some in pairs(somes) do
+    if j > 1 then
+      if   abs(some.num.mu - t[#t].num.mu) > eps and not sameSome(same,t[#t]) 
+      then push(t,some) 
+      else t[#t] = combineSome(some,t[#t]) end 
+      some.rank = #t end end end
+
 function cliffs(xs,ys,  delta)
   local lt,gt,n = 0,0,0
   for _,x in pairs(xs) do
@@ -243,15 +253,6 @@ function bootstrap(y0,z0,  bootstraps,conf)
   for i=1, b do 
     if obs(N(many(yhat)), N(many(zhat ))) > obs(y,z) then n = n + 1 end end
   return n / b >= (conf or the.stats.conf) end
-
-function rank(i,somes,eps) --> i:Num
-  t={somes[1]}
-  for j,some in pairs(somes) do
-    if j > 1 then
-      if   abs(some.num.mu - t[#t].num.mu) > eps and not sameSome(same,t[#t]) 
-      then push(t,some) 
-      else t[#t] = combineSome(some,t[#t]) end end
-    some.rank = #t end end
 
 ---------------------------------------------------------------------
 local ok={}
