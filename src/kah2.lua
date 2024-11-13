@@ -1,14 +1,14 @@
 local the = {
   guess ={ acquire= "exploit",
            enough = 50000000,
-           start = 4,
-           stop  = 30},
-  bayes  = {k     = 1, 
+           start  = 4,
+           stop   = 30},
+  bayes  = {k     = 1,
             m     = 2},
-  stats = {bootstraps=256,
-            delta = 0.197,
-            conf = 0.05,
-            cohen= 0.35},
+  stats = {bootstraps = 512,
+            delta     = 0.197,
+            conf      = 0.05,
+            cohen     = 0.35},
   p     = 2,
   rseed = 1234567891, 
   train = "../../moot/optimize/misc/auto93.csv",
@@ -75,12 +75,12 @@ function clone(i, rows,   j) --> (Data1, [row]) --> Data2
   return j end
 
 ---------------------------------------------------------------------
-local norm,pooledSdNum
+local norm,pooledSd
 
 function norm(i,x) --> (COL, num) -> num
   return x=="?" and x or (x - i.lo)/(i.hi - i.lo + 1/BIG) end
 
-function pooledSdNum(i,j)
+function pooledSd(i,j)
   return sqrt(((i.n-1)*i.sd^2 + (j.n-1)*j.sd^2)/(i.n+j.n-2)) end 
 
 ---------------------------------------------------------------------
@@ -278,7 +278,7 @@ function ok.train(s) the.train=s end
 function ok.o(_) print(o(the)) end
 
 function ok.num(_, n) 
-  n = Num(); for _=1,1000 do addCol(n,normal(20,2)) end; print(o(n)) end
+  n = Num(); for _=1,100 do addCol(n,normal(20,2)) end; print(o(n)) end
 
 function ok.sym(_, s) 
   s = Sym(); for _,x in pairs{"a","a","a","a","b","b","c"} do addCol(s,x) end
@@ -294,21 +294,33 @@ function ok.like(_, d)
     if j==1 or j%15==0 then
       print(j,loglikes(d,row,1000,2)) end end end
 
-function ok.stats(   r,t,u,d,y,n1,n2,zy)
+function ok.stats0(   r,t,u,d,y,n1,n2,y)
   local N= function(t,  n) n=n or Num(); for _,x in pairs(t) do addCol(n,x) end; return n end
-  zy = function(s) return s and "y" or "." end
+  y = function(s) return s and "y" or "." end
   d,r= 1,100
+  print("d\tclif\tboot\tcohen")
   while d< 1.2 do
-    t={}; for i=1,r do t[1+#t] = normal(10,2)^2 end 
+    t={}; for i=1,r do t[1+#t] = normal(10,1) + normal(10,2)^2 end 
     u={}; for i,x in pairs(t) do u[i] = x*d end
     d=d*1.01
     n1,n2 = N(t), N(u)
-    print(
-      string.format("%.3f\t%s\t%s\t%s", 
-                     d, y(cliffs(t,u)), y(bootstrap(t,u)), 
-                        y(abs(n1.mu - n2.mu) < .35*n1:pooledSd(n2)))) end end
+    print(string.format("%.3f\t%s\t%s\t%s", 
+                        d, y(cliffs(t,u)), y(bootstrap(t,u)), 
+                           y(abs(n1.mu - n2.mu) < .35*pooledSd(n1,n2)))) end end
 
-
+-- function repeats(t,n)
+--   u={}; for _-1,n do for _,x in pairs(t) do u[1+#u] = x end end; return u end 
+--
+-- function ok.stats1()
+--   Some("x1"),Some("x2"),Some("x3"),Some("x4"),Some("x5")
+--   n=5
+--   x1 =repeats({ 0.34, 0.49 ,0.51, 0.6},n)
+--                     x2  =[0.6  ,0.7 , 0.8 , 0.89]*n,
+--                                       x3  =[0.13 ,0.23, 0.38 , 0.38]*n,
+--                                                         x4  =[0.6  ,0.7,  0.8 , 0.9]*n,
+--                                                                           x5  =[0.1  ,0.2,  0.3 , 0.4]*n)
+--
+ 
 function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
   the.train = f
   cliffs=0.35
