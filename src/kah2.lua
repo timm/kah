@@ -2,12 +2,13 @@ local the = {
   guess ={ acquire= "exploit",
            enough = 50000000,
            start = 4,
-           Stop  = 30},
+           stop  = 30},
   bayes  = {k     = 1, 
             m     = 2},
-  stats     = {bootstraps=256,
+  stats = {bootstraps=256,
             delta = 0.197,
-            conf = 0.05},
+            conf = 0.05,
+            cohen= 0.35},
   p     = 2,
   rseed = 1234567891, 
   train = "../../moot/optimize/misc/auto93.csv",
@@ -45,13 +46,13 @@ function Cols(names,    i,this) --> ( [str] ) --> Cols
 ---------------------------------------------------------------------
 local addCol,addData,read,clone
 
-function addCol(i,x,     d) --> (NUM|SYM, x:atom) --> nil
+function addCol(i,x,     d) --> (NUM|SYM, atom) --> nil
   if x=="?" then return end
   i.n = i.n + 1
   if i.is=="Sym" then
     i.has[x] = 1 + (i.has[x] or 0)
     if i.has[x] > i.most then i.most, i.mode=i.has[x], x end 
-  else
+  else -- todo: handle n>1 for Nums 
     d    = x - i.mu
     i.mu = i.mu + d/i.n
     i.m2 = i.m2 + d*(x - i.mu) 
@@ -116,11 +117,11 @@ function loglikes(i,row, nall, nh,    prior,f,l) --> (Data,rows,int,int) --> num
 
 function guessBest(i) --> (Data) --> rows, XXX
   local acq,y,b,r,br,init,test,train,done,todo,best,rests,stop
-  stop = the.guess.Stop
+  stop = the.guess.stop
   acq= {
-    exploit = function(b,r) return b / r end,
-    explore = function(b,r) return (b + r)/abs(b-r) end,
-    adapt   = function(b,r) local w = 1 - #done/stop; return (b+r*w)/abs(b*w-r) end
+    exploit = function(b,r) return b / (r + 1/BIG) end,
+    explore = function(b,r) return (b + r)/(abs(b-r) + 1/BIG) end,
+    adapt   = function(b,r) local w = 1 - #done/stop; return (b+r*w) / (abs(b*w-r) + 1/BIG) end
   }
   y         = function(row) return ydist(i,row) end
   b         = function(row) return exp(loglikes(best, row, #done, 2)) end 
@@ -202,15 +203,23 @@ function csv(file,     src) --> str --> func
       if src then io.close(src) end end end end
 
 function Some(t,txt,    i) 
-  i= {is="Some", txt=txt, rank-0, has={}, num=Num(), n=0, mu=0} 
+  i= {is="Some", txt=txt, rank-0, has={}, num=Num()} 
   for _,x in pairs(t or {}) do addSome(i,x) end
   return i end
 
 function addSome(i, x)
   addCol(i.num, x)
-  push(i.has, x) 
-  i.mu = i.num.mu
-  i.n  = i.num.n end
+  push(i.has, x) end
+
+function combineSome(i,j) --> (Some,Some) --> Some
+  k=Some(i.all, i.txt)
+  for _,t in pairs{i.has,j,has} do
+    for _,x in pairs(t) do
+       addSome(k, x) end end
+  return k end
+
+function sameSome(i,j)
+  return cliffs(i.has,j.has) and bootstrap(i.has,j.has) end
 
 function cliffs(xs,ys,  delta)
   local lt,gt,n = 0,0,0
@@ -235,40 +244,20 @@ function bootstrap(y0,z0,  bootstraps,conf)
     if obs(N(many(yhat)), N(many(zhat ))) > obs(y,z) then n = n + 1 end end
   return n / b >= (conf or the.stats.conf) end
 
-function scottKnot1(lo,hi,rank,somes, eps,rank)
-  sum0,n0, sum1,n1 = 0,0,0,0
-  for j=lo,li do
-     some = somes[j]
-     sum1 = sum1 + some.n*some.mu
-     n1   = n1 + some.n end
-  n= n1; mu = sum1/n1
-  for j,num in pairs(some) do
-     some = somes[j]
-     sum0 = sum0 + some.n*some.mu; n1 = n0 + some.n; mu0 = sum0/n0 
-     sum1 = sum1 - some.n*some.mu; n1 = n1 - some.n; mu1 = sum1/n1 
-     now  = (n1 * (mu0 - mu)^2 + n2 * (mu1 - mu)^2 ) / n
-     if now > most then
-        diff,most,cut = now,j,mu1-mu0 end  end 
-  if cut and diff > eps then
-    ls,rs= {},{}
-    for j=lo,hi do
-      for _,x in pairs(somes[j].has) do push(j <=cut and ls or rs, x) end end
-    if not (cliffs(ls,rs) and bootstraps(ls,rs)) then
-      rank = scottKnot1(lo,cut,rank,somes,eps,rank) + 1
-      rank = scottKnot1(cut+1,hi, rank,some,eps,rank)
-      return rank end end
-  for _,some in pairs(somes) do some.rank = rank end 
-  return rank end
-
-function scottKnot(some, eps)
-  return scottKnot1(1,#somes,1,sort(somes,lt"mu"), eps) end
-
+function rank(i,somes,eps) --> i:Num
+  t={somes[1]}
+  for j,some in pairs(somes) do
+    if j > 1 then
+      if   abs(some.num.mu - t[#t].num.mu) > eps and not sameSome(same,t[#t]) 
+      then push(t,some) 
+      else t[#t] = combineSome(some,t[#t]) end end
+    some.rank = #t end end
 
 ---------------------------------------------------------------------
 local ok={}
 
 function ok.acquire(s) the.guess.acquire=s end
-function ok.Stop(s) the.guess.Stop=coerce(s) end
+function ok.Stop(s) the.guess.stop=coerce(s) end
 function ok.seed(s) the.seed=coerce(s); math.randomseed(the.seed)  end
 function ok.train(s) the.train=s end
 
@@ -301,12 +290,12 @@ function ok.guess(f,   d,asIs,toBe,rands,y,diff,cliffs)
   go2lo=function(a) local x= abs(a.mu - asIs.lo)/(asIs.sd*cliffs); return x<1 and 0 or 1 end
   map(d.rows, function(r) addCol(asIs, y(r)) end)
   for _=1,20 do 
-     addCol(rands, (y(keysort(split(shuffle(d.rows),the.guess.Stop),y)[1])))
+     addCol(rands, (y(keysort(split(shuffle(d.rows),the.guess.stop),y)[1])))
      train,test = guessBest(d)
      addCol(toBe,ydist(d,train))
      addCol(after,ydist(d,test))
      end
-   print( o{x=#d.cols.x, b4=asIs.mu,b=the.guess.Stop,rand=rands.mu,diff=diff(toBe,rands),
+   print( o{x=#d.cols.x, b4=asIs.mu,b=the.guess.stop,rand=rands.mu,diff=diff(toBe,rands),
             height=go2lo(toBe), lo=asIs.lo,guess=toBe.mu}, (f:gsub(".*/",""))) end
 -- function ok.bc()
 --   all, other = nil,nil
