@@ -243,29 +243,37 @@ function bootstrap(y0,z0,  bootstraps,conf)
 local Some, addSome, mergeSome, mergesSome
 
 function Some(t,txt,    i) 
-  i= {is="Some", txt=txt, rank=0, has={}, num=Num()} 
+  i= {is="Some", txt=txt, rank=0, prefix="   ",has={}, num=Num()} 
   for _,x in pairs(t or {}) do addSome(i,x) end
   return i end
 
 function addSome(i, x)
-  addCol(i.num, x)
-  push(i.has, x) end
+  if type(x)=="table" then 
+    if x.is=="Some" then return addSome(i, x.has) end
+    for _,y in pairs(x) do addSome(i, y) end
+  else
+    print(".")
+    addCol(i.num, x)
+    push(i.has, x) end end
 
-function mergeSome(i,j,     k) --> (Some,Some) --> Some
+function merge(i,j,     k) --> (Some,Some) --> Some
   k=Some(i.all, i.txt)
   for _,t in pairs{i.has,j.has} do
     for _,x in pairs(t) do
        addSome(k, x) end end
   return k end
 
-function mergesSome(i,somes,eps,   t) --> i:Num
+function merges(somes,eps,   t) --> i:Num
   for j,some in pairs(somes) do
-    if t 
-    then if abs(some.num.mu - t[#t].num.mu) > eps and not same(some.has,t[#t].has) 
-         then push(t,some) 
-         else t[#t] = mergeSome(some, t[#t]) end 
-    else t={some} end
-    some.rank = #t end end
+    if   t then
+      if abs(some.num.mu - t[#t].num.mu) > eps and not same(some.has,t[#t].has) 
+      then push(t,some) 
+      else t[#t] = merge(some, t[#t]) end 
+    else 
+      t={some} 
+    end
+    some.rank = #t 
+    if some.rank==1 then some.prefix=" * " end end end
 
 ---------------------------------------------------------------------
 local ok={}
@@ -308,17 +316,18 @@ function ok.stats0(   r,t,u,d,y,n1,n2,y)
                         d, y(cliffs(t,u)), y(bootstrap(t,u)), 
                            y(abs(n1.mu - n2.mu) < .35*pooledSd(n1,n2)))) end end
 
--- function repeats(t,n)
---   u={}; for _-1,n do for _,x in pairs(t) do u[1+#u] = x end end; return u end 
---
--- function ok.stats1()
---   Some("x1"),Some("x2"),Some("x3"),Some("x4"),Some("x5")
---   n=5
---   data=  {x1 =repeats({ 0.34, 0.49 ,0.51, 0.6},n),
---           x2 = repeats({0.6  ,0.7 , 0.8 , 0.89],n),
---           x3  =[0.13 ,0.23, 0.38 , 0.38]*n,
--- --                                                         x4  =[0.6  ,0.7,  0.8 , 0.9]*n,
---                                                                           x5  =[0.1  ,0.2,  0.3 , 0.4]*n)
+ function repeats(t,n)
+   u={}; for _ = 1,n do for _,x in pairs(t) do u[1+#u] = x end end; return u end 
+
+ function ok.stats1()
+   n=5
+   somes= {Some(repeats({0.34, 0.49 ,0.51, 0.6}, n), "x1"),
+           Some(repeats({0.6  ,0.7 , 0.8 , 0.89},n), "x2"),
+           Some(repeats({0.13 ,0.23, 0.38, 0.38},n), "x3"),
+           Some(repeats({0.6  ,0.7,  0.8 , 0.9}, n), "x4"),
+           Some(repeats({0.1  ,0.2,  0.3 , 0.4}, n), "x5")}
+   for _,some in pairs(merges(somes)) do
+     print(some.pre,some.mu) end end
  
 function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
   the.train = f
