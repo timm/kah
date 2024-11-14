@@ -1,10 +1,17 @@
+-- # sadas
+
+-- asdas sda sas asasdasdsaas
+-- asdasa
 local Cocomo, int, from, within
+
 
 Cocomo={}
 
 function int(x)          return (x+0.5)//1 end
 function from(lo,hi)     return lo+(hi-lo)*math.random() end
 function within(z,lo,hi) return (z>=lo and z<=hi) and z or lo+z%(hi-lo) end
+
+-- <pp>
 
 function Cocomo.risks(   _,ne,nw,nw4,sw,sw4,ne46,sw26,sw46)
   _ = 0
@@ -151,3 +158,5 @@ print(o(keys))
 for i=1,20 do 
   c = Cocomo.go()
   print(string.format("%.3g \t%.3f",c.y["Risk-"], c.y["Effort-"])) end
+
+-- asdas
