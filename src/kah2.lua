@@ -314,12 +314,11 @@ function ok.stats0(   r,t,u,d,y,n1,n2,y)
 -- function ok.stats1()
 --   Some("x1"),Some("x2"),Some("x3"),Some("x4"),Some("x5")
 --   n=5
---   x1 =repeats({ 0.34, 0.49 ,0.51, 0.6},n)
---                     x2  =[0.6  ,0.7 , 0.8 , 0.89]*n,
---                                       x3  =[0.13 ,0.23, 0.38 , 0.38]*n,
---                                                         x4  =[0.6  ,0.7,  0.8 , 0.9]*n,
+--   data=  {x1 =repeats({ 0.34, 0.49 ,0.51, 0.6},n),
+--           x2 = repeats({0.6  ,0.7 , 0.8 , 0.89],n),
+--           x3  =[0.13 ,0.23, 0.38 , 0.38]*n,
+-- --                                                         x4  =[0.6  ,0.7,  0.8 , 0.9]*n,
 --                                                                           x5  =[0.1  ,0.2,  0.3 , 0.4]*n)
---
  
 function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
   the.train = f
