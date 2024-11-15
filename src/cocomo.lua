@@ -1,23 +1,20 @@
 local Cocomo = {}
-local int, from, within
-local o,kap,map,sort
+local int,from,within,o,kap,map,sort
 
-function int(x)          return (x+0.5)//1 end
-function from(lo,hi)     return lo+(hi-lo)*math.random() end
-function within(z,lo,hi) return (z>=lo and z<=hi) and z or lo+z%(hi-lo) end
+function Cocomo.effort(w,y)
+  local em, sf, m = 1, 0, Cocomo.meta()
+  for k,w1 in pairs(w) do
+    if     m[k][1] == "+" then em = em * w1
+    elseif m[k][1] == "-" then em = em * w1 
+    else                       sf = sf + w1 end end 
+  return y.AX*y.loc^(y.BX + 0.01*sf) * em end
 
-function Cocomo.new()
-  return {is="Cocomo", x={}, beta={}} end
+function Cocomo.mxplusb(w,x)
+  if w=="+" then return (x-3)*from( 0.073,  0.21 ) + 1 end
+  if w=="-" then return (x-3)*from(-0.187, -0.078) + 1 end
+  if w=="*" then return (x-6)*from(-1.56,  -1.014) end end
 
-function Cocomo.effort(x)
-  local em,sf = 1,0
-  for k,t in pairs(x) do
-    if     t[1] == "+" then em = em * i.y[k] 
-    elseif t[1] == "-" then em = em * i.y[k] 
-    else   sf = sf + i.y[k] end end 
-  return i.y.A*i.x.Loc^(i.y.B + 0.01*sf) * em end
-
-function Cocomo.x(    p,n,s)
+function Cocomo.meta(    p,n,s)
   p,n,s = "+","-","*"
   return {
     Loc = {"1",2,200},
@@ -96,36 +93,38 @@ function Cocomo.risks(   _,ne,nw,nw4,sw,sw4,ne46,sw26,sw46)
     Team= {Aexp=nw,   Sced=nw,  Site=nw}, --6
     Time= {Acap=sw46, Pcap=sw46, Tool=sw26}, --10
     Tool= {Acap=nw,   Pcap=nw,  Pmat=nw}} end -- 6
- 
-function Cocomo.valRiks(i,risk)
-  local n=0
-  for a1,t in pairs(risk) do
-    for a2,d in pairs(t) do n= n + d[i.x[a1]][i.x[a2]] end end
+
+function from(lo,hi)     
+  lo = lo or 1
+  hi = hi or 5
+  return lo+(hi-lo)*math.random() end
+
+function within(z,lo,hi) 
+  lo = lo or 1
+  hi = hi or 5
+  return (0.5 + (z>=lo and z<=hi) and z or lo+z%(hi-lo)) // 1 end
+
+function Cocomo.risk(x,    n)
+  n=0
+  for a1,t in pairs(Cocomo.risks()) do
+    for a2,d in pairs(t) do n = n + d[x[a1]][x[a2]] end end
   return (n/108)^0.33 end
 
-function Cocomo.model(w,x)
-  if w=="1" then return x end
-  if w=="+" then return (x-3)*from( 0.073,  0.21 ) + 1 end
-  if w=="-" then return (x-3)*from(-0.187, -0.078) + 1 end
-  return                (x-6)*from(-1.56,  -1.014) end
+function Cocomo.go(project)-- project has same format as meta, but maybe fewer slos
+  local w,x,y = {},{},{}
+  for k,t0 in pairs(Cocomo.meta) do
+    if k=="Loc" then y.loc = from(2,200) else
+      t1   = project[k] or t0
+      x[k] = within( from(t1[2], t1[3]), t0[2], t0[3] ) 
+      w[k] = Cocomo.mxplusb(t0[1], x[k]) end
+  end
+  y.AX         = from(2.3, 9.18)
+  y.BX         = (.85 - 1.1)/(9.18-2.2)*y.A+.9+(1.2-.8)/2
+  y["Effort-"] = Cocomo.effort(w, y)
+  y["Risk-"]   = Cocomo.risk(x)
+  return x,y end
 
--- Cocomo.go(Cocomo.new(),Comoco.defaults(), Cocomo.risk0)) 
-function Cocomo.go(i,b4,risk)
-  local i,y,effort,ready,lo,hi
-  i  = i or Cocomo.new()
-  b4 = b4 or Cocomo.defaults()
-  for k,t in pairs(b4) do 
-    lo       = t[2] or 1
-    hi       = t[3] or 5
-    i.x[k]   = int(i.x[k] and within(i.x[k],lo,hi) or from(lo,hi))
-    i.y[k]   = i.y[k] or Cocomo.model(t[1], i.x[k]) 
-  end 
-  i.y.A      = i.y.A or from(2.3, 9.18)
-  i.y.B      = i.y.B or (.85 - 1.1)/(9.18-2.2)*i.y.A+.9+(1.2-.8)/2
-  i.y["Effort-"] = i.y["Effort-"] or Cocomo.effort(i)
-  i.y["Risk-"]   = i.y["Risk-"]   or Cocomo.findRisk(i,risk or Cocomo.risks())
-  return i end
-
+-------------------------------------------------------------------------------
 function o(x,     f,g,fmt) --> (any) --> str
   fmt= string.format
   f= function(x) return #x>0 and map(x,o) or sort(kap(x,g)) end
@@ -143,6 +142,7 @@ function map(t,f,   u) --> (list,func) --> t
 function sort(t,fn) --> (list,func) --> list
   table.sort(t,fn); return t end
 
+-------------------------------------------------------------------------------
 keys={}; for k,_ in pairs(Cocomo.defaults().x) do push(keys,k) end; keys=sort(keys)
 print(o(keys))
 for i=1,20 do 
