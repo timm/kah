@@ -252,7 +252,6 @@ function addSome(i, x)
     if x.is=="Some" then return addSome(i, x.has) end
     for _,y in pairs(x) do addSome(i, y) end
   else
-    print(".")
     addCol(i.num, x)
     push(i.has, x) end end
 
@@ -266,6 +265,7 @@ function merge(i,j,     k) --> (Some,Some) --> Some
 function merges(somes,eps,   t) --> i:Num
   for j,some in pairs(somes) do
     if   t then
+      print(o(t[#t]))
       if abs(some.num.mu - t[#t].num.mu) > eps and not same(some.has,t[#t].has) 
       then push(t,some) 
       else t[#t] = merge(some, t[#t]) end 
@@ -273,7 +273,8 @@ function merges(somes,eps,   t) --> i:Num
       t={some} 
     end
     some.rank = #t 
-    if some.rank==1 then some.prefix=" * " end end end
+    if some.rank==1 then some.prefix=" * " end end 
+    return some,t  end
 
 ---------------------------------------------------------------------
 local ok={}
@@ -326,7 +327,8 @@ function ok.stats0(   r,t,u,d,y,n1,n2,y)
            Some(repeats({0.13 ,0.23, 0.38, 0.38},n), "x3"),
            Some(repeats({0.6  ,0.7,  0.8 , 0.9}, n), "x4"),
            Some(repeats({0.1  ,0.2,  0.3 , 0.4}, n), "x5")}
-   for _,some in pairs(merges(somes)) do
+    
+   for _,some in pairs(merges(somes, 0.01)) do
      print(some.pre,some.mu) end end
  
 function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
