@@ -5,18 +5,13 @@ hi() {
   echo -ne "\033[1;33m"
   cat<<-'EOF'
 
-                       "Beautiful, beautiful.       
-                        Magnicent desolation." 
-         ,                       -- B. Aldrian   
-       _=|_   
-     _[_## ]_
-_  +[_[_+_]P/    _    |_       ____      _=--|-~
- ~---\_I_I_[=\--~ ~~--[o]--==-|##==]-=-~~  o]H
--~ /[_[_|_]_]\\  -_  [[=]]    |====]  __  !j]H
-  /    "|"    \      ^U-U^  - |    - ~ .~  U/~
- ~~--__~~~--__~~-__   H_H_    |_     --   _H_
--. _  ~~~#######~~~     ~~~-    ~~--  ._ - ~~-=
-           ~~~=~~  -~~--  _     . -      _ _ -
+          _.._
+         .' .-'`    "Don't tell me the sky is 
+        /  /         the limit when there are 
+        |  |         footprints on the moon." 
+        \  \         -- Paul Brandt
+  jgs    '._'-._
+            ```
 
 EOF
   echo -ne "\033[0m"
