@@ -8,7 +8,7 @@ local the = {
   stats = {bootstraps = 512,
             delta     = 0.197,
             conf      = 0.05,
-            cohen     = 0.35},
+            cohen     = 0.2},
   p     = 2,
   rseed = 1234567891, 
   train = "../../moot/optimize/misc/auto93.csv",
@@ -122,7 +122,7 @@ function loglikes(i,row, nall, nh,    prior,f,l) --> (Data,rows,int,int) --> num
   l     = function(n) return n>0 and log(n) or 0 end
   return l(prior) + sum(i.cols.x, f) end
 
-function guessBest(i) --> (Data) --> rows, XXX
+function guessBest(i, sortp) --> (Data) --> rows, XXX
   local acq,y,b,r,br,init,test,train,done,todo,best,rest,stop
   stop = the.guess.stop
   acq= {
@@ -143,7 +143,7 @@ function guessBest(i) --> (Data) --> rows, XXX
     for j,row in pairs(done) do addData(j<=sqrt(#done) and best or rest, row) end
     todo = keysort(todo, br)             
     for _=1,2 do push(done, pop(todo,1)); push(done, pop(todo)) end end
-  return done, keysort(test,br) end   
+  return done, (sortp and keysort(test,br) or test) end   
 
 ---------------------------------------------------------------------
 function normal(mu,sd) --> (num, num) --> 0..1
@@ -247,6 +247,8 @@ function Some(t,txt,    i)
   i= {is="Some", txt=txt, rank=0, prefix="   ",has={}, num=Num()} 
   for _,x in pairs(t or {}) do addSome(i,x) end
   return i end
+
+function showSome(i) return string.format("%s%s",i.prefix, i.num.mu) end
 
 function addSome(i, x)
   if type(x)=="table" then 
@@ -366,22 +368,31 @@ function ok.stats4(   n)
 
 function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
   the.train = f or the.train
-  cliffs=0.35
-  print(the.train)
-  d=read(the.train)
-  asIs, toBe, after, rands=Num(), Num(),Num(),Num()
+  cliffs = 0.35
+  d = read(the.train)
+  rxs  = {asIs=Some({},"asIs"), rand=Some({},"rand"), explore=Some({},"explore"), 
+          exploit=Some({},"exploit"), adapt=Some({},"adapt")}
   y     = function(row) return ydist(d,row) end
   diff  = function(a,b) local x= abs(a.mu - b.mu)/(asIs.sd*cliffs);    return x<1 and 0 or x end
   go2lo = function(a)   local x= abs(a.mu - asIs.lo)/(asIs.sd*cliffs); return x<1 and 0 or 1 end
   map(d.rows, function(r) addCol(asIs, y(r)) end)
   for _=1,20 do 
      addCol(rands, (y(keysort(split(shuffle(d.rows),the.guess.stop),y)[1])))
-     local train,test = guessBest(d)
-     addCol(toBe,ydist(d,train[1]))
-     addCol(after,ydist(d,test[#test]))
-   end
-   print( o{x=#d.cols.x, b4=asIs.mu,b=the.guess.stop,rand=rands.mu,diff=diff(toBe,rands),
-            height=go2lo(toBe), lo=asIs.lo,guess=toBe.mu}, (the.train:gsub(".*/",""))) end
+     for _,acq in pairs{"exploit","explore","adapt"} do
+       the.guess.acquire = acq
+       local train,test = guessBest(d,false)
+       addSome(rxs[acq], ydist(d,train[1])) end
+  end
+  rxs=merges(rxs, rx.asIs.mu.sd * the.stats.cohen)
+  print( o{x=#d.cols.x, y=#d.cols.y, rows=#d.rows,
+           b4      = rxs.asIs.num.mu,
+           lo      = rxs.asIs.num.lo,
+           rand    = showSome(rxs.rand),
+           explore = showSome(rxs.explore),
+           exploit = showSome(rxs.exploit),
+           adapt   = showSome(rxs.adapt),
+         b=the.guess.stop,rand=rands.mu,diff=diff(toBe,rands),
+         height=go2lo(toBe), lo=asIs.lo,guess=toBe.mu}, (the.train:gsub(".*/",""))) end
      
 ---------------------------------------------------------------------
 if arg[0] =="kah2.lua" then 
