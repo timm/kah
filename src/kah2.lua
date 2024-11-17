@@ -249,7 +249,7 @@ function Some(t,txt,    i)
   for _,x in pairs(t or {}) do addSome(i,x) end
   return i end
 
-function show(i) return string.format("%g$%s",i.rank==1 and "*" or " ", o(i.num.mu)) end
+function show(i) return string.format("%g%s",o(i.num.mu), i.rank==1 and "*" or " ") end
 
 function addSome(i, x)
   if type(x)=="table" then 
@@ -397,7 +397,8 @@ function ok.guess(f,   d,asIs,toBe,after,rands,y,cliffs)
            explore = show(rx.explore),
            exploit = show(rx.exploit),
            adapt   = show(rx.adapt),
-           file    = the.train:gsub(".*/","")}) end
+           file    = the.train:gsub(".*/",""),
+           zstop   = the.guess.stop}) end
      
 function ok.all(_)
   tests{"--o","--num","--sym", "--data","--like","--stats0",

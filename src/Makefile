@@ -78,7 +78,6 @@ report1=gawk 'BEGIN {                                                           
 rep:
 	cat ~/tmp/rq1 | $(report1)
 
-rq1:
-	mkdir -p ~/tmp
-	$(MAKE) go=guess eg1 | tee ~/tmp/$@  
-	cat ~/tmp/$@ | $(report1)
+rq1:; mkdir -p ~/tmp;$(MAKE) go=guess eg1 | tee ~/tmp/$@$(Stop); cat ~/tmp/$@$(Stop) | $(report1)
+rq2:; $(MAKE) Stop=100 rq1
+
