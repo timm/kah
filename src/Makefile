@@ -69,10 +69,10 @@ eg0: ../../moot/optimize/*/auto93.csv
 eg1: ../../moot/optimize/[hcpm]*/*.csv
 	$(foreach f, $^, (lua kah2.lua --Stop $(Stop) --acquire $(acq) --$(go) $f &);) 
 
-report1=gawk 'BEGIN {                                                                 \
-   OFS=",| ";                                                                          \
-   print("\n\n(x-y)/x,| x=asIs,| y=toBe,| atLowest,| asRand,| file")}                   \
-	{print int(100*($$4-$$8)/($$4+0.000001)),$$4,$$8, $$10 ? "" : "y", $$6 ? "" : "y",$$NF \
+report1=gawk 'BEGIN {                                                                             \
+   OFS=",| ";                                                                                      \
+   print("\n\ndelta,| b4,| toBe,| close,| exploit,| explore,| adapt,| rand,| x,| y,| rows,| file")}  \
+	{print i   $$10,    $$4  $$24,   $$8,   $$12,     $$14,     $$2,    $$20 $$26, $$28, $$22, $$16     \
 	}' | sort -t, -nk2 | column -s,  -t 
 
 rep:

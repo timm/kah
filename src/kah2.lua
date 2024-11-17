@@ -189,9 +189,9 @@ function o(x,     f,g,fmt) --> (any) --> str
   fmt= string.format
   f= function(x) return #x>0 and map(x,o) or sort(kap(x,g)) end
   g= function(k,v) if k ~= "is" then return fmt(":%s %s",k,o(x[k])) end end
-  return type(x)=="number" and fmt("%.2g",x) or  
+  return type(x)=="number" and fmt(x//1==x and "%s" or "%.2g",x) or  
          type(x)~="table"  and tostring(x) or 
-         (x.is or "") .. "(" .. table.concat(f(x)," ") .. ")" end 
+         (x.is or "") .. "(" .. table.concat(f(x)," ") .. " )" end 
 
 function coerce(s,     other,trim) --> string --> atom
   trim  = function(s) return s:match"^%s*(.-)%s*$" end
@@ -209,6 +209,7 @@ function csv(file,     src) --> str --> func
     else 
       if src then io.close(src) end end end end
 
+function noop(...) end
 -------------------------------------------------------------------------------
 local same, cliffs, bootstrap
 
@@ -244,11 +245,11 @@ function bootstrap(y0,z0,  bootstraps,conf)
 local Some, addSome, merge, merges
 
 function Some(t,txt,    i) 
-  i= {is="Some", txt=txt, rank=0, prefix="   ",has={}, num=Num()} 
+  i= {is="Some", txt=txt, rank=0, has={}, num=Num()} 
   for _,x in pairs(t or {}) do addSome(i,x) end
   return i end
 
-function showSome(i) return string.format("%s%s",i.prefix, i.num.mu) end
+function show(i) return string.format(" %s%g",i.rank==1 and "*" or " ", i.num.mu) end
 
 function addSome(i, x)
   if type(x)=="table" then 
@@ -275,12 +276,12 @@ function merges(somes,eps,   t)
     else 
       t={some} 
     end
-    some.rank = #t 
-    if some.rank==1 then some.prefix=" * " end end 
+    some.rank = #t end
   return somes,t  end
 
 ---------------------------------------------------------------------
 local ok={}
+
 
 function ok.acquire(s) the.guess.acquire=s end
 function ok.Stop(s) the.guess.stop=coerce(s) end
@@ -325,7 +326,7 @@ function repeats(t,n,    u)
 
 local function _stats(somes)
   for _,some in pairs(merges(somes, 0.01)) do
-    print(some.prefix, some.num.mu, some.txt) end end
+    print(show(some), some.txt) end end
 
 function ok.stats1(   n)
   n=5
@@ -366,43 +367,57 @@ function ok.stats4(   n)
     Some({37,62,55,56,63,36,34,65,56,52,33,46,41,34,40,50,40,61,35,65,5},"GA.01p10c1")
   } end
 
-function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
+function ok.guess(f,   d,asIs,toBe,after,rands,y,cliffs)
   the.train = f or the.train
   cliffs = 0.35
   d = read(the.train)
-  rxs  = {asIs=Some({},"asIs"), rand=Some({},"rand"), explore=Some({},"explore"), 
+  rx  = {asIs=Some({},"asIs"), rand=Some({},"rand"), explore=Some({},"explore"), 
           exploit=Some({},"exploit"), adapt=Some({},"adapt")}
   y     = function(row) return ydist(d,row) end
-  diff  = function(a,b) local x= abs(a.mu - b.mu)/(asIs.sd*cliffs);    return x<1 and 0 or x end
-  go2lo = function(a)   local x= abs(a.mu - asIs.lo)/(asIs.sd*cliffs); return x<1 and 0 or 1 end
-  map(d.rows, function(r) addCol(asIs, y(r)) end)
+  map(d.rows, function(r) addSome(rx.asIs, y(r)) end)
   for _=1,20 do 
-     addCol(rands, (y(keysort(split(shuffle(d.rows),the.guess.stop),y)[1])))
+     addSome(rx.rand, (y(keysort(split(shuffle(d.rows),the.guess.stop),y)[1])))
      for _,acq in pairs{"exploit","explore","adapt"} do
        the.guess.acquire = acq
        local train,test = guessBest(d,false)
-       addSome(rxs[acq], ydist(d,train[1])) end
+       addSome(rx[acq], y(train[1])) end
   end
-  rxs=merges(rxs, rx.asIs.mu.sd * the.stats.cohen)
-  print( o{x=#d.cols.x, y=#d.cols.y, rows=#d.rows,
-           b4      = rxs.asIs.num.mu,
-           lo      = rxs.asIs.num.lo,
-           rand    = showSome(rxs.rand),
-           explore = showSome(rxs.explore),
-           exploit = showSome(rxs.exploit),
-           adapt   = showSome(rxs.adapt),
-         b=the.guess.stop,rand=rands.mu,diff=diff(toBe,rands),
-         height=go2lo(toBe), lo=asIs.lo,guess=toBe.mu}, (the.train:gsub(".*/",""))) end
+  merges(rx, rx.asIs.num.sd * the.stats.cohen)
+  toBe = (rx.explore.num.mu + rx.exploit.num.mu + rx.adapt.num.mu ) /3
+  print( o{delta   = (rx.asIs.num.mu - toBe)/rx.asIs.num.mu,
+           x       = #d.cols.x, 
+           y       = #d.cols.y, 
+           rows    = #d.rows,
+           b4      = rx.asIs.num.mu,
+           toBe    = toBe,
+           lo      = rx.asIs.num.lo,
+           close   = (toBe - rx.asIs.num.lo)/(rx.asIs.num.sd*cliffs) >= 1 and "y" or ".",
+           asIs    = show(rx.asIs),
+           rand    = show(rx.rand),
+           explore = show(rx.explore),
+           exploit = show(rx.exploit),
+           adapt   = show(rx.adapt),
+           file    = the.train:gsub(".*/","")}) end
      
----------------------------------------------------------------------
-if arg[0] =="kah2.lua" then 
-  math.randomseed(the.rseed)
-  local fails = 0
-  for k,s in pairs(arg) do
-    s = s:sub(3)
-    if ok[s] and false==ok[s](arg[k+1]) then fails=fails+1 end end
-  os.exit(fails) end 
+function ok.all(_)
+  tests{"--o","--num","--sym", "--data","--like","--stats0",
+        "--stats1", "--stats2","--stats3","--stats4", print } end
 
+---------------------------------------------------------------------
+function tests(todo,  say,     fails)
+  fails = 0
+  for k,s in pairs(todo) do
+    math.randomseed(the.rseed)
+    s = s:sub(3)
+    if ok[s] then
+      if false==ok[s](arg[k+1]) 
+      then say(s,"FAIL",("-"):rep(20))
+           fails=fails+1 
+      else say(s,"PASS",("+"):rep(5)) end end end
+  os.exit(fails) end
+
+if arg[0] =="kah2.lua" then tests(arg,noop) end
+ 
   -- # first things first. code something that runs a function names on command line
   -- # code in the repl. sh is your repl
   -- # code in spirts. 10 lines, run new test(s)
