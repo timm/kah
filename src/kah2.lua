@@ -16,7 +16,7 @@ local the = {
 
 ---------------------------------------------------------------------
 local BIG = 1E32
-local any,coerce,csv,kap,keysort,lt,many,map,normal
+local any,coerce,csv,kap,keysort,lt,many,map,norm,normal
 local o,pop,push,repeats,shuffle,sort,split,sum
 local abs, cos,exp,log = math.abs, math.cos, math.exp, math.log
 local max,min,pi,R,sqrt = math.max, math.min, math.pi, math.random, math.sqrt
@@ -84,7 +84,7 @@ function pooledSd(i,j)
   return sqrt(((i.n-1)*i.sd^2 + (j.n-1)*j.sd^2)/(i.n+j.n-2)) end 
 
 ---------------------------------------------------------------------
-local ydist, xdist, dist, neighbors, norm
+local ydist, xdist, dist, neighbors
 
 function dist(i,a,b) --> (Col, atom, atom) --> num
   if a=="?" and b=="?" then return 1 end
@@ -126,16 +126,16 @@ function guessBest(i) --> (Data) --> rows, XXX
   local acq,y,b,r,br,init,test,train,done,todo,best,rest,stop
   stop = the.guess.stop
   acq= {
-    exploit = function(b,r) return b / (r + 1/BIG) end,
-    explore = function(b,r) return (b + r)/(abs(b-r) + 1/BIG) end,
-    adapt   = function(b,r) local w = 1 - #done/stop; return (b+r*w) / (abs(b*w-r) + 1/BIG) end
-  }
-  y         = function(row) return ydist(i,row) end
-  b         = function(row) return exp(loglikes(best, row, #done, 2)) end 
-  r         = function(row) return exp(loglikes(rest, row, #done, 2)) end 
-  br        = function(row) return acq[the.guess.acquire](b(row), r(row)) end
-  train, test = split(shuffle(i.rows), min(the.guess.enough, the.Test*#i.rows))
-  done, todo  = split(train, the.guess.start) 
+    exploit  = function(b,r) return b / r end,
+    explore  = function(b,r) return (b + r)/(abs(b-r) + 1/BIG) end,
+    adapt    = function(b,r) local w = (1 - #done/stop)  
+                             return (b+r*w) / (abs(b*w - r) + 1/BIG) end }
+  y          = function(row) return ydist(i,row) end
+  b          = function(row) return exp(loglikes(best, row, #done, 2)) end 
+  r          = function(row) return exp(loglikes(rest, row, #done, 2)) end 
+  br         = function(row) return acq[the.guess.acquire](b(row), r(row)) end
+  train,test = split(shuffle(i.rows), min(the.guess.enough, the.Test*#i.rows))
+  done, todo = split(train, the.guess.start) 
   while true do
     done = keysort(done, y) 
     if #done > stop or #todo < 5 then break end 
@@ -143,7 +143,7 @@ function guessBest(i) --> (Data) --> rows, XXX
     for j,row in pairs(done) do addData(j<=sqrt(#done) and best or rest, row) end
     todo = keysort(todo, br)             
     for _=1,2 do push(done, pop(todo,1)); push(done, pop(todo)) end end
-  return done[1], keysort(test,br)[#test] end   
+  return done, keysort(test,br) end   
 
 ---------------------------------------------------------------------
 function normal(mu,sd) --> (num, num) --> 0..1
@@ -324,7 +324,6 @@ function repeats(t,n,    u)
 local function _stats(somes)
   for _,some in pairs(merges(somes, 0.01)) do
     print(some.prefix, some.num.mu, some.txt) end end
- 
 
 function ok.stats1(   n)
   n=5
@@ -366,31 +365,23 @@ function ok.stats4(   n)
   } end
 
 function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
-  the.train = f
+  the.train = f or the.train
   cliffs=0.35
+  print(the.train)
   d=read(the.train)
   asIs, toBe, after, rands=Num(), Num(),Num(),Num()
-  y = function(row) return ydist(d,row) end
-  diff=function(a,b) local x= abs(a.mu - b.mu)/(asIs.sd*cliffs); return x<1 and 0 or x end
-  go2lo=function(a) local x= abs(a.mu - asIs.lo)/(asIs.sd*cliffs); return x<1 and 0 or 1 end
+  y     = function(row) return ydist(d,row) end
+  diff  = function(a,b) local x= abs(a.mu - b.mu)/(asIs.sd*cliffs);    return x<1 and 0 or x end
+  go2lo = function(a)   local x= abs(a.mu - asIs.lo)/(asIs.sd*cliffs); return x<1 and 0 or 1 end
   map(d.rows, function(r) addCol(asIs, y(r)) end)
   for _=1,20 do 
      addCol(rands, (y(keysort(split(shuffle(d.rows),the.guess.stop),y)[1])))
      local train,test = guessBest(d)
-     addCol(toBe,ydist(d,train))
-     addCol(after,ydist(d,test))
-     end
+     addCol(toBe,ydist(d,train[1]))
+     addCol(after,ydist(d,test[#test]))
+   end
    print( o{x=#d.cols.x, b4=asIs.mu,b=the.guess.stop,rand=rands.mu,diff=diff(toBe,rands),
-            height=go2lo(toBe), lo=asIs.lo,guess=toBe.mu}, (f:gsub(".*/",""))) end
--- function ok.bc()
---   all, other = nil,nil
---   for row in csv(the.train) do
---     if not all then all = Data(row) else
---       kl = row[#row]
---       other[kl]  = other[kl] or cloneData(all)
---       colData(all, row)
---       colData(other[kl], row) end
---     if #all.rows > 5 then xxx end end end  end
+            height=go2lo(toBe), lo=asIs.lo,guess=toBe.mu}, (the.train:gsub(".*/",""))) end
      
 ---------------------------------------------------------------------
 if arg[0] =="kah2.lua" then 
