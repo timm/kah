@@ -17,7 +17,7 @@ local the = {
 ---------------------------------------------------------------------
 local BIG = 1E32
 local any,coerce,csv,kap,keysort,lt,many,map,normal
-local o,pop,push,shuffle,sort,split,sum
+local o,pop,push,repeats,shuffle,sort,split,sum
 local abs, cos,exp,log = math.abs, math.cos, math.exp, math.log
 local max,min,pi,R,sqrt = math.max, math.min, math.pi, math.random, math.sqrt
 
@@ -211,6 +211,7 @@ function csv(file,     src) --> str --> func
 
 -------------------------------------------------------------------------------
 local same, cliffs, bootstrap
+
 function same(x,y)
   return cliffs(x,y) and bootstrap(x,y) end
 
@@ -240,7 +241,7 @@ function bootstrap(y0,z0,  bootstraps,conf)
   return n / b >= (conf or the.stats.conf) end
 
 -------------------------------------------------------------------------------
-local Some, addSome, mergeSome, mergesSome
+local Some, addSome, merge, merges
 
 function Some(t,txt,    i) 
   i= {is="Some", txt=txt, rank=0, prefix="   ",has={}, num=Num()} 
@@ -262,10 +263,10 @@ function merge(i,j,     k) --> (Some,Some) --> Some
        addSome(k, x) end end
   return k end
 
-function merges(somes,eps,   t) --> i:Num
+function merges(somes,eps,   t) 
+  somes = keysort(somes, function(m) return m.num.mu end)
   for j,some in pairs(somes) do
     if   t then
-      print(o(t[#t]))
       if abs(some.num.mu - t[#t].num.mu) > eps and not same(some.has,t[#t].has) 
       then push(t,some) 
       else t[#t] = merge(some, t[#t]) end 
@@ -274,7 +275,7 @@ function merges(somes,eps,   t) --> i:Num
     end
     some.rank = #t 
     if some.rank==1 then some.prefix=" * " end end 
-    return some,t  end
+  return somes,t  end
 
 ---------------------------------------------------------------------
 local ok={}
@@ -303,34 +304,67 @@ function ok.like(_, d)
     if j==1 or j%15==0 then
       print(j,loglikes(d,row,1000,2)) end end end
 
-function ok.stats0(   r,t,u,d,y,n1,n2,y)
+function ok.stats0(   r,t,u,d,y,n1,n2)
   local N= function(t,  n) n=n or Num(); for _,x in pairs(t) do addCol(n,x) end; return n end
   y = function(s) return s and "y" or "." end
   d,r= 1,100
   print("d\tclif\tboot\tcohen")
   while d< 1.2 do
     t={}; for i=1,r do t[1+#t] = normal(10,1) + normal(10,2)^2 end 
-    u={}; for i,x in pairs(t) do u[i] = x*d end
+    u={}; for i,x in pairs(t) do  u[i] = x*d end
     d=d*1.01
     n1,n2 = N(t), N(u)
     print(string.format("%.3f\t%s\t%s\t%s", 
                         d, y(cliffs(t,u)), y(bootstrap(t,u)), 
                            y(abs(n1.mu - n2.mu) < .35*pooledSd(n1,n2)))) end end
 
- function repeats(t,n)
-   u={}; for _ = 1,n do for _,x in pairs(t) do u[1+#u] = x end end; return u end 
+function repeats(t,n,    u)
+  u={}; for _ = 1,n do for _,x in pairs(t) do u[1+#u] = x end end; return u end 
 
- function ok.stats1()
-   n=5
-   somes= {Some(repeats({0.34, 0.49 ,0.51, 0.6}, n), "x1"),
-           Some(repeats({0.6  ,0.7 , 0.8 , 0.89},n), "x2"),
-           Some(repeats({0.13 ,0.23, 0.38, 0.38},n), "x3"),
-           Some(repeats({0.6  ,0.7,  0.8 , 0.9}, n), "x4"),
-           Some(repeats({0.1  ,0.2,  0.3 , 0.4}, n), "x5")}
-    
-   for _,some in pairs(merges(somes, 0.01)) do
-     print(some.pre,some.mu) end end
+local function _stats(somes)
+  for _,some in pairs(merges(somes, 0.01)) do
+    print(some.prefix, some.num.mu, some.txt) end end
  
+
+function ok.stats1(   n)
+  n=5
+  _stats{
+         Some(repeats({0.34, 0.49 ,0.51, 0.6}, n), "x1"),
+         Some(repeats({0.13 ,0.23, 0.38, 0.38},n), "x3"),
+         Some(repeats({0.6  ,0.7,  0.8 , 0.9}, n), "x4"),
+         } end
+
+function ok.stats2(   n)
+  n=5
+  _stats{
+         Some(repeats({0.34, 0.49 ,0.51, 0.6}, n), "x1"),
+         Some(repeats({0.6  ,0.7 , 0.8 , 0.89},n), "x2"),
+         Some(repeats({0.13 ,0.23, 0.38, 0.38},n), "x3"),
+         Some(repeats({0.6  ,0.7,  0.8 , 0.9}, n), "x4"),
+         Some(repeats({0.1  ,0.2,  0.3 , 0.4}, n), "x5")
+         } end
+
+function ok.stats3(   n)
+  n=5
+  _stats{
+         Some(repeats({0.34, 0.49 ,0.51, 0.6}, n), "x1"),
+         Some(repeats({0.34, 0.49 ,0.51, 0.6}, n), "x2"),
+         Some(repeats({0.34, 0.49 ,0.51, 0.6}, n), "x3"),
+         } end
+
+function ok.stats4(   n)
+  n=5
+  _stats{
+    Some({4,5,7,8,9,6,5,4,4,5,6,6,7,8,8,7,6,5,4,4,5,6,7,8,9,8,7,5,4},"oranges"),
+    Some({6,7,8,9,0,9,8,7,6,7,8,9,0,9,8,7,6,7,8},"pears"),
+    Some({1,12,13,15,14,13,11,12,13,14,15,14,13,11,12,13,14,15,
+          17,18,10,19,10,19,17,16,15,16,15,17,17,19,10,10,18,17,
+          16,15,15,16,17,17,19,19,17},"bananas"),
+    Some({79,86,86,77,65,77,72,73,65,56,60,69,75,70,62,56,69,55,67,99},"DEcf.5f"),
+    Some({27,27,26,2,25,26,10,20,31,6,17,25,25,19,25,23,16,5,2,23},"GQ.05p10c2"),
+    Some({37,62,55,56,63,36,34,65,56,52,33,46,41,34,40,50,40,61,35,65,5},"GA.01p10c1")
+  } end
+
 function ok.guess(f,   d,asIs,toBe,after,rands,y,diff,go2lo,cliffs)
   the.train = f
   cliffs=0.35
