@@ -70,13 +70,13 @@ eg1: ../../moot/optimize/[hcpm]*/*.csv
 	$(foreach f, $^, (lua kah2.lua --Stop $(Stop) --acquire $(acq) --$(go) $f &);) 
 
 report1=gawk 'BEGIN {                                                                             \
-   OFS=",| ";                                                                                      \
-   print("\n\ndelta,| b4,| toBe,| close,| exploit,| explore,| adapt,| rand,| x,| y,| rows,| file")}  \
-	{print i   $$10,    $$4  $$24,   $$8,   $$12,     $$14,     $$2,    $$20 $$26, $$28, $$22, $$16     \
+   OFS=",| ";                                                                 \
+   print("\n\n\#delta,| b4,| toBe,| close,| exploit,| explore,| adapt,| rand,| x,| y,| rows,| file")}  \
+	{print       $$10,    $$4, $$24,  $$8,    $$12,     $$14,     $$2,    $$20, $$26, $$28, $$22, $$16     \
 	}' | sort -t, -nk2 | column -s,  -t 
 
 rep:
-	cat ~/tmp/@ | $(report1)
+	cat ~/tmp/rq1 | $(report1)
 
 rq1:
 	mkdir -p ~/tmp

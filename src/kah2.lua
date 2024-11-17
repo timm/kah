@@ -249,7 +249,7 @@ function Some(t,txt,    i)
   for _,x in pairs(t or {}) do addSome(i,x) end
   return i end
 
-function show(i) return string.format(" %s%g",i.rank==1 and "*" or " ", i.num.mu) end
+function show(i) return string.format("%g$%s",i.rank==1 and "*" or " ", o(i.num.mu)) end
 
 function addSome(i, x)
   if type(x)=="table" then 
@@ -389,7 +389,7 @@ function ok.guess(f,   d,asIs,toBe,after,rands,y,cliffs)
            y       = #d.cols.y, 
            rows    = #d.rows,
            b4      = rx.asIs.num.mu,
-           toBe    = toBe,
+           toBe    =  toBe,
            lo      = rx.asIs.num.lo,
            close   = (toBe - rx.asIs.num.lo)/(rx.asIs.num.sd*cliffs) >= 1 and "y" or ".",
            asIs    = show(rx.asIs),
