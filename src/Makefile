@@ -90,10 +90,11 @@ report2=gawk 'BEGIN {OFS="\t"; CONVFMT="%.2f"} \
              pass==2 { d= (x[$$16] - $$24); d=d> $$30 * 0.2 ? d : 0; print($$4, x[$$16], $$24, $$30 * .2, $$16)}\
             ' pass=1 ~/tmp/rq1.20 pass=2 ~/tmp/rq1.80 | sort -nk 2
 
-report3='BEGIN { print FILENAME }                  \
-               { for(i=1;i<=6;i+=2)                 \
-				           if (sub(/\*/,"",$$(i+1))) {       \
-						         seen[$$i] += $$(i+1); win[$$i]++} }\
+report3='BEGIN { print FILENAME }                   \
+               { for(i=1;i<=6;i+=2)                  \
+				           if (sub(/\*/,"",$$(i+1))) {        \
+									   print($$(i+1));                   \
+										 seen[$$i] += $$(i+1); win[$$i]++} }\
 					END  { for(w in win) print w,win[w]/NR, seen[w]/NR }'
 
 rq4:
