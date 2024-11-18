@@ -12,7 +12,7 @@ local the = {
   p     = 2,
   rseed = 1234567891, 
   train = "../../moot/optimize/misc/auto93.csv",
-  Test  = 0.33}
+  Test  = 0.66}
 
 ---------------------------------------------------------------------
 local BIG = 1E32
@@ -285,7 +285,7 @@ local ok={}
 
 function ok.acquire(s) the.guess.acquire=s end
 function ok.Stop(s) the.guess.stop=coerce(s) end
-function ok.seed(s) the.seed=coerce(s); math.randomseed(the.rseed)  end
+function ok.seed(s) the.rseed=coerce(s); math.randomseed(the.rseed)  end
 function ok.train(s) the.train=s end
 
 function ok.o(_) print(o(the)) end
@@ -401,16 +401,16 @@ function ok.guess(f,   d,toBe,y,cliffs,rx)
            zsd     = rx.asIs.num.sd,
            zstop   = the.guess.stop}) end
 
-local function _order(i, todo,       yes,y,r,a,b,y1,y2)
+local function _order(i, todo,       yes,y,n,r,a,b,y1,y2)
   y = function(row) return ydist(i,row) end
-  yes,r = 0,256
-  for _=1,r do 
+  yes,n = 0,0
+  for _=1,10000 do 
     a,b = R(#todo), R(#todo)
-    if a > b then a,b = b,a end
-    ya, yb = y(todo[a]), y(todo[b])
-    if ya < yb then yes=yes+1 end
-    end
-  return yes/r end
+      if a > b then a,b = b,a end
+      ya, yb = y(todo[a]), y(todo[b])
+      if ya < yb then yes=yes+1 end
+      n=n+1 end 
+  return yes/n end
 
 function ok.order(f,   d,rx)
   the.train = f or the.train
@@ -421,7 +421,7 @@ function ok.order(f,   d,rx)
      for _,acq in pairs{"exploit","explore","adapt"} do
        the.guess.acquire = acq
        local train,test = guessBest(d,true)
-       addSome(rx[acq], 1 -  _order(d,test))  end
+       addSome(rx[acq],  1 - _order(d,test))  end
   end
   merges(rx,0.01)
   print( o{x       = #d.cols.x, 

@@ -90,13 +90,14 @@ report2=gawk 'BEGIN {OFS="\t"; CONVFMT="%.2f"} \
              pass==2 { d= (x[$$16] - $$24); d=d> $$30 * 0.2 ? d : 0; print($$4, x[$$16], $$24, $$30 * .2, $$16)}\
             ' pass=1 ~/tmp/rq1.20 pass=2 ~/tmp/rq1.80 | sort -nk 2
 
-report3='{for(i=1;i<=6;i+=2) if ($$(i+1) ~ /\*/) win[$$i]++} END {for(w in win) print w,win[w]/NR}'
+report3='BEGIN { print FILENAME }                  \
+               { for(i=1;i<=6;i+=2)                 \
+				           if (sub(/\*/,"",$$(i+1))) {       \
+						         seen[$$i] += $$(i+1); win[$$i]++} }\
+					END  { for(w in win) print w,win[w]/NR, seen[w]/NR }'
 
-rq3:; mkdir -p ~/tmp;$(MAKE) go=order eg1 > ~/tmp/$@.$(Stop); echo $(Stop); cat ~/tmp/$@.$(Stop) | gawk --source $(report3)
 rq4:
-	$(MAKE) Stop=20 rq3
-	$(MAKE) Stop=40 rq3
-	$(MAKE) Stop=60 rq3
-	$(MAKE) Stop=80 rq3
-	$(MAKE) Stop=100 rq3
+	$(foreach s,12 24 48 96, $(MAKE) Stop=$s go=order eg1 | tee ~/tmp/$@.$s; )
 
+rq4a:
+	$(foreach s,12 24 48 96, echo $s; gawk --source $(report3) ~/tmp/rq4.$s;)
