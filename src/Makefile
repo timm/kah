@@ -78,6 +78,15 @@ report1=gawk 'BEGIN {                                                           
 rep:
 	cat ~/tmp/rq1 | $(report1)
 
-rq1:; mkdir -p ~/tmp;$(MAKE) go=guess eg1 | tee ~/tmp/$@$(Stop); cat ~/tmp/$@$(Stop) | $(report1)
-rq2:; $(MAKE) Stop=100 rq1
+rq1:; mkdir -p ~/tmp;$(MAKE) go=guess eg1 | tee ~/tmp/$@.$(Stop); cat ~/tmp/$@.$(Stop) | $(report1)
+rq2:
+	$(MAKE) Stop=20 rq1; $(MAKE) Stop=80 rq1;
+	$(report2)
+             
+#pass==2 { d= (x[$$16] - $$24); d=d> $$30 * 0.2 ? d : 0; print(   d/x[$$16], $$24,$$16, $$30)}\
+
+report2=gawk 'BEGIN {OFS="\t"; CONVFMT="%.2f"} \
+             pass==1 { x[$$16]=$$24 } \
+             pass==2 { d= (x[$$16] - $$24); d=d> $$30 * 0.2 ? d : 0; print($$4, x[$$16], $$24, $$30 * .35, $$16)}\
+            ' pass=1 ~/tmp/rq1.20 pass=2 ~/tmp/rq1.80 | sort -nk 2
 

@@ -398,6 +398,7 @@ function ok.guess(f,   d,asIs,toBe,after,rands,y,cliffs)
            exploit = show(rx.exploit),
            adapt   = show(rx.adapt),
            file    = the.train:gsub(".*/",""),
+           zsd     = rx.asIs.num.sd,
            zstop   = the.guess.stop}) end
      
 function ok.all(_)
