@@ -17,7 +17,7 @@ local the = {
 ---------------------------------------------------------------------
 local BIG = 1E32
 local any,coerce,csv,kap,keysort,lt,many,map,norm,normal
-local o,pop,push,repeats,shuffle,sort,split,sum
+local noop, o,pop,push,repeats,show,shuffle,sort,split,sum,tests
 local abs, cos,exp,log = math.abs, math.cos, math.exp, math.log
 local max,min,pi,R,sqrt = math.max, math.min, math.pi, math.random, math.sqrt
 
@@ -133,7 +133,7 @@ function guessBest(i, sortp) --> (Data) --> rows, XXX
   y          = function(row) return ydist(i,row) end
   b          = function(row) return exp(loglikes(best, row, #done, 2)) end 
   r          = function(row) return exp(loglikes(rest, row, #done, 2)) end 
-  br         = function(row) return acq[the.guess.acquire](b(row), r(row)) end
+  br         = function(row) return -acq[the.guess.acquire](b(row), r(row)) end
   train,test = split(shuffle(i.rows), min(the.guess.enough, the.Test*#i.rows))
   done, todo = split(train, the.guess.start) 
   while true do
@@ -367,7 +367,7 @@ function ok.stats4(   n)
     Some({37,62,55,56,63,36,34,65,56,52,33,46,41,34,40,50,40,61,35,65,5},"GA.01p10c1")
   } end
 
-function ok.guess(f,   d,asIs,toBe,after,rands,y,cliffs)
+function ok.guess(f,   d,toBe,y,cliffs,rx)
   the.train = f or the.train
   cliffs = 0.35
   d = read(the.train)
@@ -400,7 +400,40 @@ function ok.guess(f,   d,asIs,toBe,after,rands,y,cliffs)
            file    = the.train:gsub(".*/",""),
            zsd     = rx.asIs.num.sd,
            zstop   = the.guess.stop}) end
-     
+
+local function _order(i, todo,       yes,y,r,a,b,y1,y2)
+  y = function(row) return ydist(i,row) end
+  yes,r = 0,256
+  for _=1,r do 
+    a,b = R(#todo), R(#todo)
+    if a > b then a,b = b,a end
+    ya, yb = y(todo[a]), y(todo[b])
+    if ya < yb then yes=yes+1 end
+    end
+  return yes/r end
+
+function ok.order(f,   d,rx)
+  the.train = f or the.train
+  d = read(the.train)
+  rx  = {explore=Some({},"explore"), 
+          exploit=Some({},"exploit"), adapt=Some({},"adapt")}
+  for _=1,20 do 
+     for _,acq in pairs{"exploit","explore","adapt"} do
+       the.guess.acquire = acq
+       local train,test = guessBest(d,true)
+       addSome(rx[acq], 1 -  _order(d,test))  end
+  end
+  merges(rx,0.01)
+  print( o{x       = #d.cols.x, 
+           y       = #d.cols.y, 
+           rows    = #d.rows,
+           explore = show(rx.explore),
+           exploit = show(rx.exploit),
+           adapt   = show(rx.adapt),
+           file    = the.train:gsub(".*/",""),
+           zstop   = the.guess.stop}) end
+
+
 function ok.all(_)
   tests{"--o","--num","--sym", "--data","--like","--stats0",
         "--stats1", "--stats2","--stats3","--stats4", print } end
