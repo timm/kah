@@ -12,7 +12,7 @@ local the = {
   p     = 2,
   rseed = 1234567891, 
   train = "../../moot/optimize/misc/auto93.csv",
-  Test  = 0.66}
+  Test  = 0.5}
 
 ---------------------------------------------------------------------
 local BIG = 1E32
@@ -245,11 +245,11 @@ function bootstrap(y0,z0,  bootstraps,conf)
 local Some, addSome, merge, merges
 
 function Some(t,txt,    i) 
-  i= {is="Some", txt=txt, rank=0, has={}, num=Num()} 
+  i= {is="Some", txt=txt, rank=0, has={}, num=Num(), suffix = " "}
   for _,x in pairs(t or {}) do addSome(i,x) end
   return i end
 
-function show(i) return string.format("%g%s",o(i.num.mu), i.rank==1 and "*" or " ") end
+function show(i) return string.format("%g%s",o(i.num.mu), i.suffix) end
 
 function addSome(i, x)
   if type(x)=="table" then 
@@ -266,7 +266,7 @@ function merge(i,j,     k) --> (Some,Some) --> Some
        addSome(k, x) end end
   return k end
 
-function merges(somes,eps,   t) 
+function merges(somes,eps,maximize,   t) 
   somes = keysort(somes, function(m) return m.num.mu end)
   for j,some in pairs(somes) do
     if   t then
@@ -277,6 +277,9 @@ function merges(somes,eps,   t)
       t={some} 
     end
     some.rank = #t end
+  for _,some in pairs(somes) do 
+      if not maximize and some.rank == 1 then some.suffix ="*" end 
+      if maximize and some.rank == #t then some.suffix ="*" end end 
   return somes,t  end
 
 ---------------------------------------------------------------------
@@ -325,7 +328,7 @@ function repeats(t,n,    u)
   u={}; for _ = 1,n do for _,x in pairs(t) do u[1+#u] = x end end; return u end 
 
 local function _stats(somes)
-  for _,some in pairs(merges(somes, 0.01)) do
+  for _,some in pairs(merges(somes, 0.01,true)) do
     print(show(some), some.txt) end end
 
 function ok.stats1(   n)
@@ -401,16 +404,15 @@ function ok.guess(f,   d,toBe,y,cliffs,rx)
            zsd     = rx.asIs.num.sd,
            zstop   = the.guess.stop}) end
 
-local function _order(i, todo,       yes,y,n,r,a,b,y1,y2)
+local function _order(i, todo,       y,yes,repeats,a,b,ya,ya)
   y = function(row) return ydist(i,row) end
-  yes,n = 0,0
-  for _=1,10000 do 
+  yes,repeats = 0,10000
+  for _=1,repeats do 
     a,b = R(#todo), R(#todo)
-      if a > b then a,b = b,a end
-      ya, yb = y(todo[a]), y(todo[b])
-      if ya < yb then yes=yes+1 end
-      n=n+1 end 
-  return yes/n end
+    if a > b then a,b = b,a end
+    ya, yb = y(todo[a]), y(todo[b])
+    if ya < yb then yes=yes+1 end end
+  return yes/repeats end
 
 function ok.order(f,   d,rx)
   the.train = f or the.train
@@ -421,9 +423,9 @@ function ok.order(f,   d,rx)
      for _,acq in pairs{"exploit","explore","adapt"} do
        the.guess.acquire = acq
        local train,test = guessBest(d,true)
-       addSome(rx[acq],  1 - _order(d,test))  end
+       addSome(rx[acq],   _order(d,test))  end
   end
-  merges(rx,0.01)
+  merges(rx,0.01,true)
   print( o{x       = #d.cols.x, 
            y       = #d.cols.y, 
            rows    = #d.rows,
