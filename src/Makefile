@@ -100,4 +100,4 @@ rq4:
 	$(foreach s,12 24 48 98, $(MAKE) Stop=$s go=order eg1 | tee ~/tmp/$@.$s; )
 
 rq4a:
-	$(foreach s,12 24 48 96, echo $s; gawk --source $(report3) ~/tmp/rq4.$s;)
+	$(foreach s,12 24 48 98, echo $s; gawk --source $(report3) ~/tmp/rq4.$s;)
