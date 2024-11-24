@@ -123,27 +123,29 @@ function loglikes(i,row, nall, nh,    prior,f,l) --> (Data,rows,int,int) --> num
   return l(prior) + sum(i.cols.x, f) end
 
 function guessBest(i, sortp) --> (Data) --> rows, XXX
-  local acq,y,b,r,br,init,test,train,done,todo,best,rest,stop
-  stop = the.guess.stop
-  acq= {
+  local ACQ,Y,B,R,BR,test,train,done,todo,best,rest
+  ACQ= {
     exploit  = function(b,r) return b / r end,
     explore  = function(b,r) return (b + r)/(abs(b-r) + 1/BIG) end,
-    adapt    = function(b,r) local w = (1 - #done/stop)  
-                             return (b+r*w) / (abs(b*w - r) + 1/BIG) end }
-  y          = function(row) return ydist(i,row) end
-  b          = function(row) return exp(loglikes(best, row, #done, 2)) end 
-  r          = function(row) return exp(loglikes(rest, row, #done, 2)) end 
-  br         = function(row) return -acq[the.guess.acquire](b(row), r(row)) end
+    adapt    = function(b,r) local w = (1 - #done/the.guess.stop)  
+                             return (b+r*w) / (abs(b*w - r) + 1/BIG) end 
+  }
+  Y          = function(row) return ydist(i,row) end
+  B          = function(row) return exp(loglikes(best, row, #done, 2)) end 
+  R          = function(row) return exp(loglikes(rest, row, #done, 2)) end 
+  BR         = function(row) return -ACQ[the.guess.acquire](B(row), R(row)) end
   train,test = split(shuffle(i.rows), min(the.guess.enough, the.Test*#i.rows))
   done, todo = split(train, the.guess.start) 
   while true do
-    done = keysort(done, y) 
-    if #done > stop or #todo < 5 then break end 
+    done = keysort(done, Y) 
+    if #done >= the.guess.stop or #todo < 7 then break end 
     best,rest = clone(i),clone(i)
     for j,row in pairs(done) do addData(j<=sqrt(#done) and best or rest, row) end
-    todo = keysort(todo, br)             
-    for _=1,2 do push(done, pop(todo,1)); push(done, pop(todo)) end end
-  return done, (sortp and keysort(test,br) or test) end   
+    todo = keysort(todo, BR)             
+    for _ = 1,3  do
+      push(done, pop(todo,1))
+      push(done, pop(todo)) end end
+  return done, (sortp and keysort(test,BR) or test) end   
 
 ---------------------------------------------------------------------
 function normal(mu,sd) --> (num, num) --> 0..1
@@ -374,7 +376,7 @@ function ok.guess(f,   d,toBe,y,cliffs,rx)
   the.train = f or the.train
   cliffs = 0.35
   d = read(the.train)
-  rx  = {asIs=Some({},"asIs"), rand=Some({},"rand"), explore=Some({},"explore"), 
+  rx  = {asIs=Some({},"asIs"), train=Some({},"train"), rand=Some({},"rand"), explore=Some({},"explore"), 
           exploit=Some({},"exploit"), adapt=Some({},"adapt")}
   y     = function(row) return ydist(d,row) end
   map(d.rows, function(r) addSome(rx.asIs, y(r)) end)
@@ -382,7 +384,8 @@ function ok.guess(f,   d,toBe,y,cliffs,rx)
      addSome(rx.rand, (y(keysort(split(shuffle(d.rows),the.guess.stop),y)[1])))
      for _,acq in pairs{"exploit","explore","adapt"} do
        the.guess.acquire = acq
-       local train,test = guessBest(d,false)
+       local train,_ = guessBest(d,false)
+       addSome(rx.train, #train)
        addSome(rx[acq], y(train[1])) end
   end
   merges(rx, rx.asIs.num.sd * the.stats.cohen)
@@ -402,7 +405,8 @@ function ok.guess(f,   d,toBe,y,cliffs,rx)
            adapt   = show(rx.adapt),
            file    = the.train:gsub(".*/",""),
            zsd     = rx.asIs.num.sd,
-           zstop   = the.guess.stop}) end
+           zstop   = the.guess.stop,
+           zevals  = rx.train.num.mu}) end
 
 local function _order(i, todo,       y,yes,repeats,a,b,ya,ya)
   y = function(row) return ydist(i,row) end

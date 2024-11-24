@@ -61,7 +61,7 @@ lines:
 
 go=guess
 acq=explore
-Stop=30
+Stop=24
 
 eg0: ../../moot/optimize/*/auto93.csv
 	$(foreach f, $^, (lua kah2.lua --acquire $(acq) --$(go) $f );)
@@ -76,10 +76,12 @@ report1=gawk 'BEGIN {                                                           
 	}' | sort -t, -nk2 | column -s,  -t 
 
 rep:
-	cat ~/tmp/rq1 | $(report1)
+	cat ~/tmp/rq1.$(Stop) | $(report1)
+	cat ~/tmp/rq1.$(Stop) | $(report1) | gawk -F\| 'NR>0{a[NR]=$$1; y+= $$4~/y/} END{ n=asort(a); m=int(n/4); print(a[m],a[m*2],a[m*3],y)}'
+
 
 rq1:; mkdir -p ~/tmp;$(MAKE) go=guess eg1 | tee ~/tmp/$@.$(Stop); cat ~/tmp/$@.$(Stop) | $(report1)
-rq2:
+rq1a:
 	$(MAKE) Stop=20 rq1; $(MAKE) Stop=80 rq1;
 	$(report2)
              
@@ -97,7 +99,7 @@ report3='BEGIN { print FILENAME }                     \
 				 END  { for(w in seen) print w,win[w]/NR, seen[w]/NR }'
 
 rq4:
-	$(foreach s,12 24 48 98, $(MAKE) Stop=$s go=order eg1 | tee ~/tmp/$@.$s; )
+	$(foreach s,12 24 , $(MAKE) Stop=$s go=order eg1 | tee ~/tmp/$@.$s; )
 
 rq4a:
-	$(foreach s,12 24 48 98, echo $s; gawk --source $(report3) ~/tmp/rq4.$s;)
+	$(foreach s,12 24 , echo $s; gawk --source $(report3) ~/tmp/rq4.$s;)
