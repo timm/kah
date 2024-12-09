@@ -1,3 +1,11 @@
+FQ:
+- how do i divide things into modules
+- for how selctively import
+    - how do do comamnd line
+        - how to do test suite
+            - messpace management. static code checking?
+                
+
 curse of the model:
 if you drove her today baset a  speed limit sign you saw the output
 of some risk model that decide fr all cars and all drivers a ssped
