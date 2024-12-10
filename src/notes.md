@@ -1,3 +1,7 @@
+treating code as a meta resource. code does not jsut run. it a resoruce that
+can offer multiple srcies. documetaton. texting, a whol
+erange of different functions.
+
 FQ:
 - how do i divide things into modules
 - for how selctively import
