@@ -1,37 +1,54 @@
-
 #!/usr/bin/env lua
--- ok2.lua : using kmeans++ initializer, find one good example
--- (c) 2024 Tim Menzies <timm@ieee.org>, MIT license.
+local the,go={},{}
+function go.h(_) print([[
+kseed.lua : multi-objective optimization. Evals only items from kmeans++ initializer.    
+(c) 2024 Tim Menzies <timm@ieee.org>, MIT license.
+   
+USAGE:
+  lua kseed.lua [OPTIONS}
+   
+OPTIONS:
+  -d file  csv file of data (default =        ]].. the.data  ..[[)
+  -p int   coefficient of distance (default = ]].. the.p     ..[[)
+  -r int   random number seed  (default =     ]].. the.rseed ..[[)                 
+  -s int   #samples searched for each new centroid (default = ]]..the.samples..[[)
+]]) end
 
-local DATA
-local Big=1E32
 local the= {p= 2,
             data= "../../moot/optimize/misc/auto93.csv",
-            seed= 1234567891,
+            rseed= 1234567891,
             samples= 32}
 
+function go.p(x) the.p = x+0 end 
+function go.d(x) the.data = data end
+function go.s(x) the.samples = s+0 end
+function go.r(x) the.rseed = x+0; math.randomseed(the.rseed); end
+
+local l=require"lib"
+local any,  sort,  two,  shuffle,  norm,  push,  csv,  min,  pick,  o,   new =
+    l.any,l.sort,l,two,l.shuffle,l.norm,l.push,l.csv,l.min,l.pick,l.o, l.new
+
+local Big=1E32
 local Num, Data = {}, {}
-local make
-
 -------------------------------------------------------------------------------
-local l=require"kahlib"
-local any,  sort,  two,  shuffle,  norm,  push,  csv, min,    pick, o,  new =
-    l.any,l.sort,l,two,l.shuffle,l.norm,l.push.l.csv,l.min,l.pick,l.o, l.new
+-- ### Structs
 
-------------------------------------------------------------------------------
+-- This code is so simmple, it only needs summaries of numeric columns
 local Num, Data = {},{}
 
+-- Summarize numeric columns
 function Num:new(name) 
-  return new(Num,{lo= Big,    -- smallest number seen  
-                  hi= -Big,   -- largest number seen
-                  goal = name:find"-$" and 0 or 1 -- (min|max)imize = 0,1
+  return new(Num,{lo= Big,    -- smallest number seen in a column 
+                  hi= -Big,   -- largest number seen in a column
+                  utopia = name:find"-$" and 0 or 1 -- (min|max)imize = 0,1
                  }) end
 
+-- Holds the rows and column sumamres.
 function Data:new(names) 
   self = new(Data, {
-      x=   {}, -- independent columns
-      y=   {}, -- dependent columns
-      num ={}, -- num[i] = {goal=0 or 1, lo=.., hi=...}
+      num ={}, -- num[i] : list[Num]
+      x=   {}, -- independent columns (keyed by column number)
+      y=   {}, -- dependent columns (keyed by column number)
       rows={}  -- set of rows
       })
   for k,s in pairs(names) do
@@ -39,8 +56,10 @@ function Data:new(names)
     if not s:find"X$" then
       if s:find"[!+-]$" then self.y[k] = self.num[k] else self.x[k] = k end end end
   return self end
+-------------------------------------------------------------------------------
+-- ## Update
 
-------------------------------------------------------------------------------
+-- Update  knowledge of numeric columns. Ensures `x` is a numeric.
 function Num:add(x)
   if x=="?" then return x end
   x = x + 0
@@ -48,29 +67,33 @@ function Num:add(x)
   self.hi = math.max(x, self.hi) 
   return x end
 
+-- Updates the rows and column summaries.
 function Data:add(t)
   for k,num in pairs(self.num) do t[k] = num:add(t[k]) end
   push(self.rows, t) 
   return self end
 
-function make(src, data,      ADD)
-  ADD = function(t) if data then data:add(t) else data=Data:new(t)  end end
-  if   type(src)=="string" 
-  then for   t in csv(src)   do ADD(t) end
-  else for _,t in pairs(src) do ADD(t) end end 
+-- Builds a new `Data` from a csv file.
+function make(src, data)
+  for t in csv(src)  do 
+    if data then data:add(t) else data=Data:new(t)  end end
   return data end
 
+-- Normalize a number 0..1
 function Num:norm(x)
   return x=="?" and x or (x - self.lo) / (self.hi - self.lo) end
-
 -------------------------------------------------------------------------------
+-- ## Distance
+
+-- IB1's distance between independent variables in row `t1`, `t2`. See section 2.4 of 
+-- https://link.springer.com/article/10.1007/BF00153759
 function Data:xdist(t1,t2,  n,d,DIST)
   DIST= function(num, a,b) 
-          if (a=="?" and b=="?") then return 1 end
-          if not num then return a == b and 0 or 1 end 
+          if (a=="?" and b=="?") then return 1 end -- if all unknown, assume max
+          if not num then return a == b and 0 or 1 end -- non-numerics are easy
           a,b = num:norm(a), num:norm(b) 
-          a = a ~= "?" and a or (b<0.5 and 1 or 0)
-          b = b ~= "?" and b or (a<0.5 and 1 or 0)
+          a = a ~= "?" and a or (b<0.5 and 1 or 0) -- when isnf doubt, assume max
+          b = b ~= "?" and b or (a<0.5 and 1 or 0) -- when in dout, assume max
           return math.abs(a - b) end
   d,n=0,0
   for k,col in pairs(self.x) do
@@ -78,13 +101,15 @@ function Data:xdist(t1,t2,  n,d,DIST)
     d = d + math.abs(DIST(self.num[k], t1[k], t2[k])) ^ the.p end
   return (d/n) ^ (1/the.p) end
 
+-- Return distance to utopia of the dependent variables.
 function Data:ydist(t,    n,d)
   d,n=0,0
   for k,num in pairs(self.y) do
     n = n + 1
-    d = d + math.abs(num:norm(t[k]) - num.goal) ^ the.p end
+    d = d + math.abs(num:norm(t[k]) - num.utopia) ^ the.p end
   return (d/n) ^ (1/the.p) end
 
+-- kmeans++ initialization. New centroids are distance^2  from existing ones.
 function Data:around(k,  rows,      t,out,r1,r2,u)
   rows = rows or self.rows
   out = {any(rows)}
@@ -98,13 +123,10 @@ function Data:around(k,  rows,      t,out,r1,r2,u)
     push(out, pick(u)) -- stochastically pick one item 
   end 
   return out end
-
 -------------------------------------------------------------------------------
-local go={}
+-- ## Test cases
 
-function go.seed(x) 
-  the.seed = x+0; math.randomseed(the.seed); print(math.random()) end
-
+-- e.g. comamnd line option `lua kseed.lua -header` calls test case `eg.header(_)`.
 function go.header(_,      data)
   data = Data:new{"name","Age","Shoesize-"}
   print(o(data)) end
@@ -138,9 +160,11 @@ function go.around(file,     data)
     print(Y(sort(data:around(20),two(Y))[1])) end end
 
 -------------------------------------------------------------------------------
-math.randomseed(the.seed)
+-- ## Start-up 
+
+math.randomseed(the.rseed)
 if o(arg):find"kah.lua" then
   for k,v in pairs(arg) do
-    if go[v:sub(3)] then go[v:sub(3)](arg[k+1]) end end  end
+    if go[v:sub(2)] then go[v:sub(2)](arg[k+1]) end end  end
 	
 return {the=the, Data=Data, Num=Num}

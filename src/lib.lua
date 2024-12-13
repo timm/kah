@@ -13,7 +13,7 @@ function l.shuffle(t,    j) --> list
 function l.push(t,x) t[1+#t] =x; return x end
 
 function l.csv(file,     CELLS, src)
-  CELLS = function l.(s,t)
+  CELLS = function(s,t)
             for s1 in s:gmatch"([^,]+)" do t[1+#t]=s1:match"^%s*(.-)%s*$" end
             return t end
   src = io.input(file)

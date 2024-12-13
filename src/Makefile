@@ -36,6 +36,15 @@ push: ## commit to main
 	echo "p { text-align: right; }" >> ~/tmp/pycco.css
 	open $@
 
+../docs/%.html : %.lua
+	pycco -d ../docs  $^
+	echo "p { text-align: right;  }  " >> ../docs/pycco.css
+	gawk '/<h1>/ {print "<div class=docs>";                       \
+                while(getline x < "../etc/head.html") {print x}; \
+                print "<h1>'$^'</h1></div>";                  \
+                next} 1' $@ > tmp.tmp
+	mv tmp.tmp $@
+
 ~/tmp/%.pdf : %.lua  ## make pdf
 	@mkdir -p docs
 	@echo "pdfing : $@ ... "
