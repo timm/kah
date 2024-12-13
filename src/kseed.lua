@@ -163,8 +163,9 @@ function go.around(file,     data)
 -- ## Start-up 
 
 math.randomseed(the.rseed)
-if o(arg):find"kah.lua" then
+print(o(arg))
+if o(arg):find"kseed.lua" then
   for k,v in pairs(arg) do
-    if go[v:sub(2)] then go[v:sub(2)](arg[k+1]) end end  end
+    if go[v:sub(2)] then print(v); go[v:sub(2)](arg[k+1]) end end  end
 	
 return {the=the, Data=Data, Num=Num}
