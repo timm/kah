@@ -19,17 +19,19 @@ local the= {p= 2,
             rseed= 1234567891,
             samples= 32}
 
+local Big=1E32
+
+-- Handlers for command line arguements -d, -p, -s, -r
 function go.p(x) the.p = x+0 end 
 function go.d(x) the.data = data end
-function go.s(x) the.samples = s+0 end
+function go.s(x) the.samples = x+0 end
 function go.r(x) the.rseed = x+0; math.randomseed(the.rseed); end
 
+-- Imports from standard librarieslibrary
 local l=require"lib"
 local any,  sort,  two,  shuffle,  norm,  push,  csv,  min,  pick,  o,   new =
     l.any,l.sort,l,two,l.shuffle,l.norm,l.push,l.csv,l.min,l.pick,l.o, l.new
 
-local Big=1E32
-local Num, Data = {}, {}
 -------------------------------------------------------------------------------
 -- ### Structs
 
