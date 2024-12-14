@@ -20,7 +20,7 @@ DEMO:
   -data   [file]   loading rows
   -x      [file]   sorting rows by x values
   -y      [file]   sorting rows by y values
-  -around [file]   optimzation via kmeans++ initialization
+  -around [file]   find very good examples via kmeans++ initialization
 
 ]], the.data, the.p, the.rseed, the.samples)) end
 
@@ -57,17 +57,18 @@ function Num:new(name)
                  }) end
 
 -- Holds the rows and column sumamres.
-function Data:new(names) 
+function Data:new(src) 
   self = new(Data, {
       num ={}, -- num[i] : list[Num]
       x=   {}, -- independent columns (keyed by column number)
       y=   {}, -- dependent columns (keyed by column number)
       rows={}  -- set of rows
       })
-  for k,s in pairs(names) do
+  for k,s in pairs(src()) do
     if s:find"^[A-Z]" then self.num[k] = Num:new(s) end
     if not s:find"X$" then
       if s:find"[!+-]$" then self.y[k] = self.num[k] else self.x[k] = k end end end
+	self:adds(src)
   return self end
 -------------------------------------------------------------------------------
 -- ## Update
@@ -87,10 +88,9 @@ function Data:add(t)
   return self end
 
 -- Builds a new `Data` from a csv file.
-function make(src, data)
-  for t in csv(src)  do 
-    if data then data:add(t) else data=Data:new(t)  end end
-  return data end
+function Data:adds(src)
+  for t in src  do self:add(t) end 
+  return self end
 
 -- Normalize a number 0..1
 function Num:norm(x)
@@ -144,36 +144,38 @@ function go.header(_,      data)
   data = Data:new{"name","Age","Shoesize-"}
   print(o(data)) end
 
-function go.csv(file,    data)
-  for row in csv(file or the.data) do print(o(row)) end end
+function go.csv(file,    data,k)
+  k=0
+  for row in csv(file or the.data) do 
+	  k=k+1
+		if k==1 or % k%30==0 then print(o(row)) end end end
 
-function go.data(file,   data)
-  data= make(file or the.data) 
+function go.data(file,   data) data= Data:new(csv(file or the.data))
   print(#data.rows, o(data.y)) end
 
 function go.x(file,    data,X)
-  data= make(file or the.data) 
+  data= Data:new(csv(file or the.data))
   X = function(row) return data:xdist(data.rows[1], row) end
   XX= function(a,b) return X(a) < X(b) end
   for k,row in pairs(sort(data.rows,XX)) do
     if k==1 or k% 30==0 then print(o(row), X(row)) end end end 
 
 function go.y(file,    data,Y)
-  data= make(file or the.data) 
+  data= Data:new(csv(file or the.data)) 
   Y = function(row) return data:ydist(row) end
   YY= function(a,b) return Y(a) < Y(b) end
   for k,row in pairs(sort(data.rows,YY)) do
     if k==1 or k% 30==0 then print(o(row), Y(row)) end end end 
 
 function go.around(file,     data)
-  data= make(file or the.data) 
+  data= Data:new(csv(file or the.data)) 
   Y = function(row) return data:ydist(row) end
   for _=1,20 do
     shuffle(data.rows) 
     print(Y(sort(data:around(20),two(Y))[1])) end end
 
 function go.all(_)
-  l.run({"around", "header","csv","data","x","y","around"}, go, the.seed) end
+  l.run({"header","csv","data","x","y","around"}, go, the.seed) end
 -------------------------------------------------------------------------------
 
 -- ## Start-up 
