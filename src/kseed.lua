@@ -1,23 +1,34 @@
 #!/usr/bin/env lua
 local the,go={},{}
-function go.h(_) print([[
-kseed.lua : multi-objective optimization. Evals only items from kmeans++ initializer.    
+function go.h(_) print(string.format([[
+
+kseed.lua : multi-objective optimization via kmeans++ initialization.
 (c) 2024 Tim Menzies <timm@ieee.org>, MIT license.
    
 USAGE:
-  lua kseed.lua [OPTIONS}
+  lua kseed.lua [OPTIONS] [DEMO]
    
 OPTIONS:
-  -d file  csv file of data (default =        ]].. the.data  ..[[)
-  -p int   coefficient of distance (default = ]].. the.p     ..[[)
-  -r int   random number seed  (default =     ]].. the.rseed ..[[)                 
-  -s int   #samples searched for each new centroid (default = ]]..the.samples..[[)
-]]) end
+  -d file  csv file of data (default: %s)
+  -p int   coefficient of distance (default: %s)
+  -r int   random number seed  (default: %s)
+  -s int   #samples searched for each new centroid (default: %s)
 
-local the= {p= 2,
-            data= "../../moot/optimize/misc/auto93.csv",
-            rseed= 1234567891,
-            samples= 32}
+DEMO:
+  -header          header generation
+  -csv    [file]   csv reader
+  -data   [file]   loading rows
+  -x      [file]   sorting rows by x values
+  -y      [file]   sorting rows by y values
+  -around [file]   optimzation via kmeans++ initialization
+
+]], the.data, the.p, the.rseed, the.samples)) end
+
+-- Config options
+the= {p= 2,
+      data= "../../moot/optimize/misc/auto93.csv",
+      rseed= 1234567891,
+      samples= 32}
 
 local Big=1E32
 
@@ -29,8 +40,8 @@ function go.r(x) the.rseed = x+0; math.randomseed(the.rseed); end
 
 -- Imports from standard librarieslibrary
 local l=require"lib"
-local any,  sort,  two,  shuffle,  norm,  push,  csv,  min,  pick,  o,   new =
-    l.any,l.sort,l,two,l.shuffle,l.norm,l.push,l.csv,l.min,l.pick,l.o, l.new
+local any,  sort,  two,  shuffle,  norm,  push,  csv,  min,  pick,  o,  new =
+    l.any,l.sort,l.two,l.shuffle,l.norm,l.push,l.csv,l.min,l.pick,l.o,l.new
 
 -------------------------------------------------------------------------------
 -- ### Structs
@@ -165,9 +176,8 @@ function go.around(file,     data)
 -- ## Start-up 
 
 math.randomseed(the.rseed)
-print(o(arg))
-if o(arg):find"kseed.lua" then
+if arg[0]:find"kseed" then
   for k,v in pairs(arg) do
-    if go[v:sub(2)] then print(v); go[v:sub(2)](arg[k+1]) end end  end
+    if go[v:sub(2)] then go[v:sub(2)](arg[k+1]) end end  end
 	
 return {the=the, Data=Data, Num=Num}

@@ -49,10 +49,10 @@ push: ## commit to main
 	@mkdir -p docs
 	@echo "pdfing : $@ ... "
 	@a2ps -Bj -R                            \
-		--chars-per-line=80 \
+		--chars-per-line=90 \
 		--line-numbers=1                    \
 		--highlight-level=normal  \
-		--columns 3                 \
+		--columns 2                 \
 		--borders=no --pro=color \
 		--right-footer="" --left-footer=""    \
 		--pretty-print=../etc/lua.ssh             \

@@ -46,12 +46,12 @@ function l.csv(file,     CELLS, src)
 -- Thing to string
 function l.o(it,          t,NUM,LIST,DICT) 
   NUM = function() return string.format(it//1 == it and "%s" or "%.3g",it) end
-  LIST= function() for k,v in pairs(it) do t[1+#t]=o(v) end end
-  DICT= function() for k,v in pairs(it) do t[1+#t]=string.format(":%s %s",k,o(v)) end end
+  LIST= function() for k,v in pairs(it) do t[1+#t]=l.o(v) end end
+  DICT= function() for k,v in pairs(it) do t[1+#t]=string.format(":%s %s",k,l.o(v)) end end
   t   = {}
   if type(it) == "number" then return NUM() end 
   if type(it) ~= "table"  then return tostring(it) end
-  if #x>0 then LIST() else DICT(); table.sort(t) end
+  if #it>0 then LIST() else DICT(); table.sort(t) end
   return "{" .. table.concat(t, " ") .. "}" end
 
 -- Polymporhism
