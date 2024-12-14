@@ -1,3 +1,7 @@
+objects
+	facories (creation)
+	polymorohism
+
 standard strcture
 
 /.github/workflows
