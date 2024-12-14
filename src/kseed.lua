@@ -172,7 +172,10 @@ function go.around(file,     data)
     shuffle(data.rows) 
     print(Y(sort(data:around(20),two(Y))[1])) end end
 
+function go.all(_)
+  l.run({"around", "header","csv","data","x","y","around"}, go, the.seed) end
 -------------------------------------------------------------------------------
+
 -- ## Start-up 
 
 math.randomseed(the.rseed)

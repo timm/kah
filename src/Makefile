@@ -21,7 +21,7 @@ vim: ## vim install
 	vim +'PluginInstall --sync' +qa
 
 sh: ## run a shell
-	bash --init-file  ../etc/dotbashrc -i
+	bash --init-file  ../etc/dotshellrc -i
 
 push: ## commit to main
 	- echo -en "$(LOUD)Why this push? $(SOFT)" ;  read x ; git commit -am "$$x" ;  git push

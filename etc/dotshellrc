@@ -17,10 +17,10 @@ hi() {
            T
            |
            !
-           :         . : 
+           :         . :
            .       *           --Ojo
   
-Don't tell me the sky is the limit when 
+Don't tell me the sky is the limit when
 there are footprints on the moon. -- Paul Brandt
 
 EOF
@@ -35,12 +35,12 @@ here="$(cd $( dirname "${BASH_SOURCE[0]}" ) && pwd )"
 
 alias ..='cd ..'
 alias ...='cd ../../../'
- 
+
 alias egrep='egrep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias h="history"
-alias ls="ls -G "      
-alias vi="\vim  -u $here/dotvimrc"
+alias ls="ls -G"
+alias vi="\vim  -u $here/doteditrc"
 
 export BASH_SILENCE_DEPRECATION_WARNING=1
 export PATH="$PWD:/opt/homebrew/bin:$PATH"

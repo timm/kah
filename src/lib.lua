@@ -60,5 +60,23 @@ function l.new(meta, t)
   meta.__tostring = meta.__tostring or l.o
   return setmetatable(t,meta) end
 
+-- Runtime
+function l.run(some, all, seed,       ok,msg,fails)
+  fails = 0
+  for _,one in pairs(some) do
+    math.randomseed(seed or 1234567891)
+    print(l.yellow(one))
+    ok,msg = xpcall(all[one], debug.traceback)
+    if   ok == false 
+    then print(l.red("fail in "..one.." :"..msg)); fails=fails + 1
+    else print(l.green("pass")) end 
+  end 
+  print(l.yellow(string.format("%s failure(s)",fails)))
+  os.exit(fails) end
+
+function l.yellow(s) return "\27[33m" .. s .. "\27[0m" end
+function l.green(s)  return "\27[32m" .. s .. "\27[0m" end
+function l.red(s)    return "\27[31m" .. s .. "\27[0m" end
+
 --  Return
 return l
