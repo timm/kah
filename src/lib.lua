@@ -5,14 +5,29 @@ function l.push(t,x) t[1+#t] =x; return x end
 
 function l.any(t) return t[math.random(#t)] end
 
+function l.many(t,n,   u)
+  u={}; for i = 1,(n or #t) do u[i]=l.any(t) end; return u end
+
+function l.items(t,    i)
+  i=0
+  return function() 
+           i=i+1
+           if i <= #t then return t[i] end end end
 -- Sort
 function l.two(F) return function(a,b) return F(a) < F(b) end end
+
+function l.lt(x)  return function(a,b) return a[x] < b[x] end end
+function l.gt(x)  return function(a,b) return a[x] > b[x] end end
 
 function l.sort(t,F) table.sort(t,F); return t end
 
 function l.shuffle(t,    j) 
   for i = #t, 2, -1 do j = math.random(i); t[i], t[j] = t[j], t[i] end
   return t end
+
+-- map
+function l.map(t,F,     u)
+  u={}; for _,x in pairs(t) do u[1+#u]=F(x) end ; return u end
 
 -- Select the items for `t` with least `F(x)` score.
 function l.min(t,F,      n,lo,out)
@@ -24,10 +39,10 @@ function l.min(t,F,      n,lo,out)
 
 -- Select return a key  form `t`, biased by the numeric values of those keys.
 function l.pick(t,     u,r,all,anything)
-  u,all=0
+  u,all={},0
   for x,n in pairs(t) do l.push(u,{n,x}); all= all + n end
   r = math.random()
-  for _,xn in pairs(l.sort(u,gt(1))) do
+  for _,xn in pairs(l.sort(u,l.gt(1))) do
     r = r - xn[1]/all
     if r <= 0 then return xn[2] else anything = anything or xn[2] end end
   return anything end
@@ -65,11 +80,10 @@ function l.run(some, all, seed,       ok,msg,fails)
   fails = 0
   for _,one in pairs(some) do
     math.randomseed(seed or 1234567891)
-    print(l.yellow(one))
     ok,msg = xpcall(all[one], debug.traceback)
     if   ok == false 
-    then print(l.red("fail in "..one.." :"..msg)); fails=fails + 1
-    else print(l.green("pass")) end 
+    then print(l.red("FAILURE for '"..one.."' :"..msg)); fails=fails + 1
+    else print(l.green("pass for '"..one.."'")) end 
   end 
   print(l.yellow(string.format("%s failure(s)",fails)))
   os.exit(fails) end

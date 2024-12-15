@@ -1,4 +1,10 @@
 #!/usr/bin/env lua
+-- Imports from standard libraries
+local l=require"lib"
+local any,  sort,  two,  shuffle,  norm,  push,  csv,  min,  pick,  o,  new =
+    l.any,l.sort,l.two,l.shuffle,l.norm,l.push,l.csv,l.min,l.pick,l.o,l.new
+local lt,map = l.lt,l.map
+
 local the,go={},{}
 function go.h(_) print(string.format([[
 
@@ -32,21 +38,16 @@ the= {p= 2,
 
 local Big=1E32
 
--- Handlers for command line arguements -d, -p, -s, -r
+-- Handlers for command line arguments -d, -p, -s, -r
 function go.p(x) the.p = x+0 end 
-function go.d(x) the.data = data end
+function go.d(x) the.data = x end
 function go.s(x) the.samples = x+0 end
 function go.r(x) the.rseed = x+0; math.randomseed(the.rseed); end
-
--- Imports from standard librarieslibrary
-local l=require"lib"
-local any,  sort,  two,  shuffle,  norm,  push,  csv,  min,  pick,  o,  new =
-    l.any,l.sort,l.two,l.shuffle,l.norm,l.push,l.csv,l.min,l.pick,l.o,l.new
 
 -------------------------------------------------------------------------------
 -- ### Structs
 
--- This code is so simmple, it only needs summaries of numeric columns
+-- This code is so simple, it only needs summaries of numeric columns
 local Num, Data = {},{}
 
 -- Summarize numeric columns
@@ -56,18 +57,23 @@ function Num:new(name)
                   utopia = name:find"-$" and 0 or 1 -- (min|max)imize = 0,1
                  }) end
 
--- Holds the rows and column sumamres.
+-- Holds the rows and column summaries.
 function Data:new(src) 
   self = new(Data, {
       num ={}, -- num[i] : list[Num]
       x=   {}, -- independent columns (keyed by column number)
       y=   {}, -- dependent columns (keyed by column number)
-      rows={}  -- set of rows
+      rows={},  -- set of rows
+			xs=0,ys=0
       })
   for k,s in pairs(src()) do
     if s:find"^[A-Z]" then self.num[k] = Num:new(s) end
     if not s:find"X$" then
-      if s:find"[!+-]$" then self.y[k] = self.num[k] else self.x[k] = k end end end
+      if s:find"[!+-]$" then self.y[k] = self.num[k] else self.x[k] = k end 
+		if self.x[k] then self.xs=1+self.xs end
+		if self.y[k] then self.ys=1+self.ys end
+		end 
+	end
 	self:adds(src)
   return self end
 -------------------------------------------------------------------------------
@@ -105,8 +111,8 @@ function Data:xdist(t1,t2,  n,d,DIST)
           if (a=="?" and b=="?") then return 1 end -- if all unknown, assume max
           if not num then return a == b and 0 or 1 end -- non-numerics are easy
           a,b = num:norm(a), num:norm(b) 
-          a = a ~= "?" and a or (b<0.5 and 1 or 0) -- when isnf doubt, assume max
-          b = b ~= "?" and b or (a<0.5 and 1 or 0) -- when in dout, assume max
+          a = a ~= "?" and a or (b<0.5 and 1 or 0) -- when in doubt, assume max
+          b = b ~= "?" and b or (a<0.5 and 1 or 0) -- when in doubt, assume max
           return math.abs(a - b) end
   d,n=0,0
   for k,col in pairs(self.x) do
@@ -139,28 +145,30 @@ function Data:around(k,  rows,      t,out,r1,r2,u)
 -------------------------------------------------------------------------------
 -- ## Test cases
 
--- e.g. comamnd line option `lua kseed.lua -header` calls test case `eg.header(_)`.
+local Sample=require"stats"
+
+-- e.g. command line option `lua kseed.lua -header` calls test case `eg.header(_)`.
 function go.header(_,      data)
-  data = Data:new{"name","Age","Shoesize-"}
+  data = Data:new(l.items({{"name","Age","Shoesize-"}}))
   print(o(data)) end
 
 function go.csv(file,    data,k)
   k=0
   for row in csv(file or the.data) do 
 	  k=k+1
-		if k==1 or % k%30==0 then print(o(row)) end end end
+		if k==1 or  k%30==0 then print(o(row)) end end end
 
 function go.data(file,   data) data= Data:new(csv(file or the.data))
   print(#data.rows, o(data.y)) end
 
-function go.x(file,    data,X)
+function go.xs(file,    data,X)
   data= Data:new(csv(file or the.data))
   X = function(row) return data:xdist(data.rows[1], row) end
   XX= function(a,b) return X(a) < X(b) end
   for k,row in pairs(sort(data.rows,XX)) do
     if k==1 or k% 30==0 then print(o(row), X(row)) end end end 
 
-function go.y(file,    data,Y)
+function go.ys(file,    data,Y)
   data= Data:new(csv(file or the.data)) 
   Y = function(row) return data:ydist(row) end
   YY= function(a,b) return Y(a) < Y(b) end
@@ -174,8 +182,45 @@ function go.around(file,     data)
     shuffle(data.rows) 
     print(Y(sort(data:around(20),two(Y))[1])) end end
 
+function go.compare(file,  b4,now,copy)
+  SORTER=function(a,b) 
+	         return a._meta.mu < b._meta.mu or 
+	               (a._meta.mu == b._meta.mu and a.txt < b.txt) end
+	G = function(x) return string.format("%.2g",x) end
+  repeats=50
+	data= Data:new(csv(file or the.data)) 
+  Y = function(row) return data:ydist(row) end
+	b4=Sample:new(0)
+	all={b4}
+	copy={}
+	copy[0]=b4
+	for _,r in pairs(data.rows) do all[1]:add(Y(r)) end 
+	math.randomseed(1)
+  for _,k in pairs{15,20,25,30,40,80,120} do
+	  push(all,Sample:new(k))
+		copy[k]=all[#all]
+    for _=1,repeats do
+  		shuffle(data.rows)
+  	  all[#all]:add(sort(map(data:around(k),Y))[1]) end end
+	---------
+	want = sort(Sample.merges(sort(all,lt"mu"),b4.sd*0.35),SORTER)[1].txt
+	rand=Sample:new(-1)
+	push(all,rand)
+	copy[-1] = rand
+	for _=1,repeats do
+  	shuffle(data.rows)
+	  u={}; for j,row in pairs(data.rows) do if j > want then break else push(u,Y(row)) end  end  
+		rand:add(sort(u)[1])  end
+	---------
+	all= sort(Sample.merges(sort(all,lt"mu"),b4.sd*0.35),SORTER)
+  report = {#data.rows,data.xs,data.ys, G(b4.lo)}
+  for _,k in pairs{0,-1,15,20,25,30,40,80,120} do
+	  push(report, string.format("%s %.2g",copy[k]._meta.rank, copy[k].mu)) end
+	push(report,(file or the.data):gsub("^.*/",""))
+	print(table.concat(report,", ")) end          
+ 
 function go.all(_)
-  l.run({"header","csv","data","x","y","around"}, go, the.seed) end
+  l.run({"header","csv","data","xs","ys","around"}, go, the.seed) end
 -------------------------------------------------------------------------------
 
 -- ## Start-up 

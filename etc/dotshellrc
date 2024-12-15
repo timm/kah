@@ -4,24 +4,24 @@ hi() {
   clear
   echo -ne "\033[1;33m"
   cat<<-'EOF'
-  
-           .                      .
-           .                      ;
-           :                  - --+- -
-           !           .          !
-           |        .             .
-           |_         +
-        ,  | `.
-  --- --+-<#>-+- ---  --  -
-        `._|_,'
-           T
-           |
-           !
-           :         . :
-           .       *           --Ojo
-  
-Don't tell me the sky is the limit when
-there are footprints on the moon. -- Paul Brandt
+   
+            .                      .
+            .                      ;
+            :                  - --+- -
+            !           .          !
+            |        .             .
+            |_         +
+         ,  | `.
+   --- --+-<#>-+- ---  --  -
+         `._|_,'
+            T
+            |
+            !
+            :         . :
+            .       *           --Ojo
+   
+  Don't tell me the sky is the limit when
+  there are footprints on the moon. -- Paul Brandt
 
 EOF
   echo -ne "\033[0m"
@@ -38,6 +38,7 @@ alias ...='cd ../../../'
 
 alias egrep='egrep --color=auto'
 alias fgrep='fgrep --color=auto'
+alias kseed='lua kseed.lua'
 alias h="history"
 alias ls="ls -G"
 alias vi="\vim  -u $here/doteditrc"
