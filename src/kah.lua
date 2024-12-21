@@ -1,18 +1,11 @@
-#!/usr/bin/env lua
--- ----------------------------------------------------------------------------
--- Imports from standard libraries
-local l=require"lib"
-local any,  sort,  two,  shuffle,  push,  csv,  min,  pick,  o,  new =
-    l.any,l.sort,l.two,l.shuffle,l.push,l.csv,l.min,l.pick,l.o,l.new
-local items,lt,map,run = l.items,l.lt,l.map,l.run
-
 local the,go={},{}
-function go.h(_) print(string.format([[
+go["-h"]= function(_) print(string.format([[
 
-kseed.lua : multi-objective optimization via kmeans++ initialization.
+kah.lua : peek at a few rows, find a near global best
 (c) 2024 Tim Menzies <timm@ieee.org>, MIT license.
+
 USAGE:
-  lua kseed.lua [OPTIONS] [DEMO]
+  lua kah.lua [OPTIONS] [DEMO]
 
 OPTIONS:
   -d file  csv file of data (default: %s)
@@ -30,7 +23,7 @@ DEMO:
 
 ]], the.data, the.p, the.rseed, the.samples)) end
 
--- Config options
+-- ## Config 
 the= {p= 2,
       data= "../../moot/optimize/misc/auto93.csv",
       rseed= 1234567891,
@@ -38,31 +31,154 @@ the= {p= 2,
 
 local Big=1E32
 
--- Handlers for command line arguments -d, -p, -s, -r
-function go.p(x) the.p = x+0 end
-function go.d(x) the.data = x end
-function go.s(x) the.samples = x+0 end
-function go.r(x) the.rseed = x+0; math.randomseed(the.rseed); end
+go["-p"]= function(s) the.p = s+0 end
+go["-d"]= function(s) the.data = s end
+go["-s"]= function(s) the.samples = s+0 end
+go["-r"]= function(s) the.rseed = s+0; math.randomseed(the.rseed) end
+
+-- ## Code Conventions
+-- 
+-- - Constructors are functions with Upper case names; e.g. Num()
+-- - Optional args denoted by 2 blanks
+-- - Local variables denotes by 4 spaces.
+-- - In function argument lists, for non-local vars
+--   - n=num, s=string, b=bool,a=array,f=fun, x=anything;   
+--     e.g. sfile is a string that is a file name
+--   - u is an output array.
+--   - d=dict,t=a or d,
+--   - ns,ss,bs = array of num,s,bs
+--   - nums,cols,datas = array of Num, Cols, Datas
+-- - Often, 
+--   - i,j,are loop counters
+--   - k,v are key value pairs from dict.
+--   - e,g,h,m,p,q,r,u,w,x,y are anything at all
+--   - z is a variable catching the output
+--
+-- ## References
+--
+-- [1] https://en.wikipedia.org/wiki/Fisher-Yates_shuffle
+
+-- ## Lib
+-- ### Lists
+local function push(a,x)--> x,  added to end of `a`.
+  a[1+#a] =x; return x end
+
+local function any(a)--> x (any items of `a`)
+  return a[math.random(#a)] end
+
+local function many(a,n,   z)--> a (`n` random items from `a`).
+  z={}; for i = 1,(n or #a) do z[i]=any(a) end; return z end
+
+local function items(a,    n)--> f.  Iterator for arrays.
+  n=0
+  return function() n=n+1; if n <= #a then return a[i] end end end
+
+-- ### Sort
+local function two(f)--> f, sorted by `f(x) < f(y)`.
+  return function(p,q) return f(p) < f(q) end end
+
+local function lt(x)--> f, sorted by  `p[s] < q[s]`.  
+  return function(p,q) return p[s] < q[s] end end
+
+local function gt(s)--> f,  sorted by  `a1[s] > a2[s]`.  
+  return function(a1,a2) return a1[s] > a2[s] end end
+
+local function sort(a,f)--> a, sorted via `f`. 
+  table.sort(a,f); return a end
+
+local function shuffle(a,    j)--> a, randomly re-ordered via Fisher-Yates [1]. 
+  for i = #a, 2, -1 do j = math.random(i); a[i], a[j] = a[j], a[i] end
+  return a end
+
+-- ### Map
+local function map(a,f,     z)--> a. Return items in `a` filtered through `f`.
+  z={}; for _,x in pairs(a) do z[1+#z]=f(x) end ; return z end
+
+local function l.min(a,f,      n,lo,z)--> x (ab item in `a` that scores least on `f`).
+  lo = math.huge
+  for _,x in pairs(a) do
+    n = f(x)
+    if n < lo then lo,z = n,x end end
+  return z end
+
+local function l.pick(d,     u,r,all,anything)--> x (a key in `d`) bias by `d`'s vals
+  u,all={},0
+  for x,n in pairs(d) do push(u,{n,x}); all= all + n end
+  r = math.random()
+  for _,xn in pairs(sort(u,gt(1))) do
+    r = r - xn[1]/all
+    if r <= 0 then return xn[2] else anything = anything or xn[2] end end
+  return anything end
+
+-- ## Strings to Things (and back again)
+local fmt=string.format
+
+local function yellow(s) return "\27[33m" .. s .. "\27[0m" end
+local function green(s)  return "\27[32m" .. s .. "\27[0m" end
+local function red(s)    return "\27[31m" .. s .. "\27[0m" end
+
+local function l.csv(sFile,     f, src)--> f (iterator for csv rows)
+  f = function(s2,z)
+        for s3 in s2:gmatch"([^,]+)" do z[1+#z]=s3:match"^%s*(.-)%s*$" end
+        return z end
+  src = io.input(sFile)
+  return function(      s1)
+    s1 = io.read()
+    if s then return f(s1,{}) else io.close(src) end end  end
+
+local function o(x,          t,LIST,DICT)--> s. Generate a string for `x`.
+  LIST= function() for k,v in pairs(x) do t[1+#t]= o(v) end end
+  DICT= function() for k,v in pairs(x) do t[1+#t]= fmt(":%s %s",k,o(v)) end end
+  t   = {}
+  if type(x) == "number" then return fmt(x//1 == x and "%s" or "%.3g",x) end
+  if type(x) ~= "table"  then return tostring(x) end
+  if #x>0 then LIST() else DICT(); table.sort(t) end
+  return "{" .. table.concat(t, " ") .. "}" end
+
+-- ### Polymorphism
+local function new(mt, a)--a, attached to a delegation table `mt`.
+  mt.__index = meta
+  mt.__tostring = mt.__tostring or o
+  return setmetatable(a,mt) end
 
 -------------------------------------------------------------------------------
 -- ### Structs
 
--- This code is so simple, it only needs summaries of numeric columns
-local Num, Data = {},{}
+local Num, Sym, Data = {},{}
 
--- Summarize numeric columns
-function Num:new(name)
-  return new(Num,{lo= Big,    -- smallest number seen in a column
-                  hi= -Big,   -- largest number seen in a column
-                  utopia = name:find"-$" and 0 or 1 -- (min|max)imize = 0,1
+function Sym:new(s,n)           -- Summarize numeric columns
+  return new(Sym,{txt = s,      -- text about this column
+                  pos = n or 0, -- column number
+		  n = 0,        -- how many items?
+		  has = {},     -- Symbol counts seen so far
+		  mode = nil,   -- most common symbol
+		  most = 0,     -- frequency of most common symbol
                  }) end
 
--- Holds the rows and column summaries.
-function Data:new(src)
+function Num:new(ns,n)        -- Summarize numeric columns
+  return new(Num,{txt = s    -- text about this column
+                  pos = n or 0 -- column number
+		  n = 0,      -- how many items?
+                  lo= Big,    -- smallest number seen in a column
+                  hi= -Big,   -- largest number seen in a column
+                  utopia = (s or ""):find"-$" and 0 or 1, -- (min|max)imize = 0,1
+		  n = 0,      -- how many items?
+		  mu= 0,      -- mean
+		  m2= 0,      -- second moment (used for sd calcualtion)
+		  sd= 0      -- standard deviaton
+                 }) end
+
+function Cols:new(ss)
+  return new(Cols, {names = ss,
+                    all   = {},
+		    x     = {},
+		    y     = {}})
+
+function Data:new(src) -- Holds the rows and column summaries.
   self = new(Data, {
-      num ={}, -- num[i] : list[Num]
-      x=   {}, -- independent columns (keyed by column number)
-      y=   {}, -- dependent columns (keyed by column number)
+                  col = num ={}, -- num[i] : list[Num]
+                  x=   {}, -- independent columns (keyed by column number)
+                  y=   {}, -- dependent columns (keyed by column number)
       rows={},  -- set of rows
       xs=0,ys=0
       })
@@ -145,6 +261,18 @@ function Data:around(k,  rows,      t,out,r1,r2,u)
   return out end
 -------------------------------------------------------------------------------
 -- ## Test cases
+local function run(ss, dfun, nSeed,       ok,msg,fails)
+  fails = 0
+  for _,one in pairs(ss) do
+    math.randomseed(sSeed or 1234567891)
+    ok,msg = xpcall(dfun[one], debug.traceback)
+    if   ok == false 
+    then print(l.red("FAILURE for '"..one.."' :"..msg)); fails=fails + 1
+    else print(l.green("pass for '"..one.."'")) end 
+  end 
+  print(l.yellow(fmt("%s failure(s)",fails)))
+  os.exit(fails) end
+
 
 local Sample=require"stats"
 
@@ -187,7 +315,7 @@ function go.compare(file,  SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,wa
   SORTER=function(a,b)
            return a._meta.mu < b._meta.mu or
                  (a._meta.mu == b._meta.mu and a.txt < b.txt) end
-  G = function(x) return string.format("%.2f",x) end
+  G = function(x) return fmt("%.2f",x) end
   G0 = function(x) return 100*x//1 end
   repeats=50
   data= Data:new(csv(file or the.data))
@@ -224,19 +352,17 @@ function go.compare(file,  SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,wa
             G(b4.lo)}   -- 5 = lo
   for _,k in pairs{0, --6 =
                    -1,15,20,25,30,40,80,160} do
-    push(report, string.format("%.2f%s",copy[k].mu, copy[k]._meta.rank)) end
+    push(report, fmt("%.2f%s",copy[k].mu, copy[k]._meta.rank)) end
   push(report,(file or the.data):gsub("^.*/",""))
   print(table.concat(report,", ")) end
 
-function go.all(_)
+go["--all"]= function(_)
   run({"header","csv","data","xs","ys","around"}, go, the.seed) end
 -------------------------------------------------------------------------------
-
 -- ## Start-up
-
 math.randomseed(the.rseed)
 if arg[0]:find"kseed" then
   for k,v in pairs(arg) do
-    if go[v:sub(2)] then go[v:sub(2)](arg[k+1]) end end  end
+    if go[v] then go[v](arg[k+1]) end end  end
 
-return {the=the, Data=Data, Num=Num}
+return {the=the, Data=Data, Sym=Sym, Num=Num}
