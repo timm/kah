@@ -45,14 +45,14 @@ push: ## commit to main
                 next} 1' $@ > tmp.tmp
 	mv tmp.tmp $@
 
-~/tmp/%.pdf : %.lua  ## make pdf
+~/tmp/%.pdf : %.lua  Makefile
 	@mkdir -p docs
 	@echo "pdfing : $@ ... "
-	@a2ps -Bj -R                            \
-		--chars-per-line=90 \
+	@a2ps -Bj --landscape                           \
+		--chars-per-line=80 \
 		--line-numbers=1                    \
 		--highlight-level=normal  \
-		--columns 2                 \
+		--columns 3                 \
 		--borders=no --pro=color \
 		--right-footer="" --left-footer=""    \
 		--pretty-print=../etc/lua.ssh             \
@@ -62,5 +62,8 @@ push: ## commit to main
 
 heading:
 	- echo -en "$(LOUD)Heading? $(SOFT)" ;  read x ; figlet -W -f mini $$x | gawk '{print "#  " $$0}'
+
+compare: ../../moot/optimize/[chmp]*/*.csv
+	$(foreach f, $^, (lua kseed.lua -compare $f &); )
 
 

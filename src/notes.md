@@ -1,3 +1,5 @@
+se is more than coding. personne;, product, process. some langauge features enable things that would be impossible otheriwsea be ahrd. e.g. erlang
+
 objects
 	facories (creation)
 	polymorohism

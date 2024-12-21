@@ -1,8 +1,9 @@
-local l=require"lib"
-local map, many, new, nomral, push = l.map, l.many, l.new, l.normal, l.push
-
 local Sample={}
-function Sample:new(s) return new(Sample,{txt=s, n=0, mu=0, m2=0, sd=0, lo=1E32,all={}}) end
+function Sample:new(s) 
+  return new(Sample,{txt=s, n=0, mu=0, m2=0, sd=0, lo=1E32,all={}}) end
+
+local l=require"lib"
+local map, many, new, normal, push = l.map, l.many, l.new, l.normal, l.push
 
 -------------------------------------------------------------------------------
 local function adds(t,     num)
@@ -23,7 +24,8 @@ local function boot(y0,z0,  straps,conf,     x,y,z,yhat,zhat,n,N)
   zhat  = map(z0, function(z1) return z1 - z.mu + x.mu end)
   n     = 0 
   for _ = 1,(straps or 512)  do
-    if adds(l.many(yhat)):delta(adds(l.many(zhat))) > y:delta(z)  then n = n + 1 end end
+    if adds(l.many(yhat)):delta(adds(l.many(zhat))) > y:delta(z) 
+    then n=n+1 end end
   return n / (straps or 512) >= (conf or 0.05)  end
 
 -- From table1 of
@@ -37,8 +39,7 @@ local function cliffs(xs,ys,  delta,      lt,gt,n)
         if y < x then lt = lt + 1 end end end
   return math.abs(gt - lt)/n <= delta end -- 0.195 
 
--------------------------------------------------------------------------------
-
+-------------------------------------------------------------------------------
 function Sample:add(x,    d)
   self.all[1+#self.all] = x
 	self.lo = math.min(self.lo,x)
@@ -51,12 +52,12 @@ function Sample:add(x,    d)
 function Sample.delta(i,j)
   return math.abs(i.mu - j.mu) / ((1E-32 + i.sd^2/i.n + j.sd^2/j.n)^.5) end
 
-function Sample:cohen(other,  d,     sd)
+function Sample:cohen(other,  d,     sd,i,j)
   i,j = self,other
   sd = (((i.n-1) * i.sd^2 + (j.n-1) * j.sd^2) / (i.n+j.n-2))^0.5
   return math.abs(i.mu - j.mu) <= (d or 0.35) * sd end
 
-function Sample:same(other,  delta,straps,conf)
+function Sample:same(other,  delta,straps,conf,i,j)
   i,j = self,other
   return cliffs(i.all,j.all,delta) and boot(i.all,j.all,straps,conf) end
 
@@ -89,10 +90,10 @@ local function normal(mu,sd,    r)
   return (mu or 0) + (sd or 1) * math.sqrt(-2*math.log(math.random()))
                                  * math.cos(2*math.pi*math.random()) end
 
--------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 local go={}
 
-function go.eg1(_,s)
+function go.eg1(_,s,r)
   r=5
 	print("r",string.format("\tmu\t\tsd")) 
 	while r < 50000 do
