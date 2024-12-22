@@ -8,18 +8,19 @@ USAGE:
   lua kah.lua [OPTIONS] [DEMO]
 
 OPTIONS:
+  -h       print help
   -d file  csv file of data (default: %s)
   -p int   coefficient of distance (default: %s)
   -r int   random number seed  (default: %s)
   -s int   #samples searched for each new centroid (default: %s)
 
 DEMO:
-  -header          header generation
-  -csv    [file]   csv reader
-  -data   [file]   loading rows
-  -x      [file]   sorting rows by x values
-  -y      [file]   sorting rows by y values
-  -around [file]   find very good examples via kmeans++ initialization
+  --header          header generation
+  --csv    [file]   csv reader
+  --data   [file]   loading rows
+  --x      [file]   sorting rows by x values
+  --y      [file]   sorting rows by y values
+  --around [file]   find very good examples via kmeans++ initialization
 
 ]], the.data, the.p, the.rseed, the.samples)) end
 
@@ -127,8 +128,7 @@ local function many(a,n,   z)--> a (`n` random items from `a`).
   z={}; for i = 1,(n or #a) do z[i]=any(a) end; return z end
 
 local function items(a,    n)--> f.  Iterator for arrays.
-  n=0
-  return function() n=n+1; if n <= #a then return a[i] end end end
+  n=0; return function() n=n+1; if n <= #a then return a[i] end end end
 
 -- ### Sort
 local function two(f)--> f, sorted by `f(x) < f(y)`.
@@ -144,29 +144,28 @@ local function sort(a,f)--> a, sorted via `f`.
   table.sort(a,f); return a end
 
 local function shuffle(a,    j)--> a, randomly re-ordered via Fisher-Yates [1]. 
-  for i = #a, 2, -1 do j = math.random(i); a[i], a[j] = a[j], a[i] end
-  return a end
+  for i= #a,2,-1 do j= math.random(i); a[i], a[j] = a[j], a[i] end; return a end
 
 -- ### Map
 local function map(a,f,     z)--> a. Return items in `a` filtered through `f`.
   z={}; for _,x in pairs(a) do z[1+#z]=f(x) end ; return z end
 
-local function min(a,f,      n,lo,z)--> x (ab item in `a` that scores least on `f`).
+local function min(a,f,      n,lo,z)--> x (item in `a` that scores least on `f`).
   lo = math.huge
   for _,x in pairs(a) do
     n = f(x)
     if n < lo then lo,z = n,x end end
   return z end
 
-local function pick(d,     u,r,all,anything)--> x (a key in `d`) bias by `d`'s vals
-  u,all={},0
-  for x,n in pairs(d) do push(u,{n,x}); all= all + n end
-  r = math.random()
-  for _,xn in pairs(sort(u,gt(1))) do
-    r = r - xn[1]/all
-    if r <= 0 then return xn[2] else anything = anything or xn[2] end end
-  return anything end
-
+-- local function pick(d,     u,r,all,anything)--> x (a key in `d`) bias by `d`'s vals
+--   u,all={},0
+--   for x,n in pairs(d) do push(u,{n,x}); all= all + n end
+--   r = math.random()
+--   for _,xn in pairs(sort(u,gt(1))) do
+--     r = r - xn[1]/all
+--     if r <= 0 then return xn[2] else anything = anything or xn[2] end end
+--   return anything end
+-- 
 -- ## Strings to Things (and back again)
 local fmt=string.format
 
@@ -193,10 +192,10 @@ local function o(x,          t,LIST,DICT)--> s. Generate a string for `x`.
   return "{" .. table.concat(t, " ") .. "}" end
 
 -- ### Polymorphism
-local function new(mt, a)--a, attached to a delegation table `mt`.
-  mt.__index = meta
-  mt.__tostring = mt.__tostring or o
-  return setmetatable(a,mt) end
+local function new(methods, a)--a, attached to a delegation table of `methods`.
+  methods.__index = methods
+  methods.__tostring = methods.__tostring or o
+  return setmetatable(a,methods) end
 
 --------------------------------------------------------------------------------
 -- ## Update
@@ -229,15 +228,10 @@ function Data:adds(src)--> Data, updated with many rows
   for a in src  do self:add(a) end
   return self end
 
-
-function Num:normalize(n)--> 0...1
-  return n=="?" and n or (n - self.lo) / (self.hi - self.lo) end
-
 -------------------------------------------------------------------------------
 -- ## Distance
-function Sym:dist(p,q)--> n. Distance between two symbols.
-  if p=="?" and q=="?" then return 1 end -- if all unknown, assume max
-  return p==q and 0 or 1 end
+function Num:normalize(n)--> 0...1
+  return n=="?" and n or (n - self.lo) / (self.hi - self.lo) end
 
 function Num:dist(p,q)--> n. Distance between two numbers.
   if (p=="?" and q=="?") then return 1 end -- if all unknown, assume max
@@ -246,34 +240,36 @@ function Num:dist(p,q)--> n. Distance between two numbers.
   q = q ~= "?" and q or (p<0.5 and 1 or 0) -- when in doubt, assume max
   return math.abs(p - q) end
 
-function Data:xdist(row1,row2,    n,d)--> n. Gap between x cols of rows [2].
-  d,n = 0,0
-  for _,col in pairs(self.cols.x) do
-    n = n + 1
-    d = d + math.abs(col:dist(row1[col.pos], row2[col.pos])) ^ the.p end
-  return (d/n) ^ (1/the.p) end
+function Sym:dist(p,q)--> n. Distance between two symbols.
+  if p=="?" and q=="?" then return 1 end -- if all unknown, assume max
+  return p==q and 0 or 1 end
 
-function Data:ydist(row,    n,d)--> n. Distance of y cols to utopia points.
-  d,n=0,0
-  for _,col in pairs(self.cols.y) do
-    n = n + 1
-    d = d + math.abs(col:normalize(row[col.pos]) - col.utopia) ^ the.p end
-  return (d/n) ^ (1/the.p) end
+function Data:xdist(row1,row2,    d)--> n. Gap between x cols of rows [2].
+  d,f = 0,function(col) return col:dist(row1[col.pos], row2[col.pos]) end
+  for _,col in pairs(self.cols.x) do d = d + math.abs(f(col)) ^ the.p end
+  return (d/#self.cols.x) ^ (1/the.p) end 
+
+function Data:ydist(row,    d)--> n. Distance of y cols to utopia points.
+  d,f = 0,function(col) col:normalize(row[col.pos]) - col.utopia end
+  for _,col in pairs(self.cols.y) do d = d + math.abs(f(col)) ^ the.p end
+  return (d/#self.cols.y) ^ (1/the.p) end
 
 -- kmeans++ initialization. Find  centroids are distance^2 from existing ones.
-function Data:around(k,  rows,      t,z,r1,r2,u)--> rows
+function Data:around(k,  rows,      z)--> rows
   rows = rows or self.rows
   z = {any(rows)}
   for _ = 2,k do
-    u={}
+    local all,u = 0,{}
     for _ = 1,math.min(the.samples, #rows) do
-      r1 = any(rows)
-      r2 = min(z,function(ru) return self:xdist(r1,ru) end) --who u closest 2?
-      if r1 and r2 then
-        u[r1]= self:xdist(r1,r2)^2 end-- how close are you
+      local row = any(rows)
+      local closest = min(z, function(maybe) return self:xdist(row,maybe) end) 
+      if row and closest then
+         all = all + push(u,{row=row, d=self:xdist(row,closest)^2}).d end
     end
-    push(z, pick(u)) -- stochastically pick one item
-  end
+    local r = math.random()
+    for _,x in pairs(all) do
+      r = r - x.d / all
+      if r <= 0 then push(z, x.row); break end end end 
   return z end
 
 -------------------------------------------------------------------------------
@@ -302,7 +298,6 @@ local function cliffs(xs,ys,  delta,      lt,gt,n)--> b. [5]
         if y < x then lt = lt + 1 end end end
   return math.abs(gt - lt)/n <= delta end -- 0.195 
 
-------------------------------------------------------------------------------
 function Sample:add(x,    d)
   self.all[1+#self.all] = x
 	self.lo = math.min(self.lo,x)
@@ -310,7 +305,7 @@ function Sample:add(x,    d)
   d       = x - self.mu
   self.mu = self.mu + d / self.n
   self.m2 = self.m2 + d * (x - self.mu)
-  self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^.5  end
+  self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^.5  end 
 
 function Sample.delta(i,j)
   return math.abs(i.mu - j.mu) / ((1E-32 + i.sd^2/i.n + j.sd^2/j.n)^.5) end
@@ -375,14 +370,6 @@ function go.eg2(_,dot,t,u)
                          d,dot(cliffs(t.all,u.all)),dot(boot(t.all,u.all)), 
                            dot(t:same(u)), dot(t:cohen(u)))) end  end
 
--------------------------------------------------------------------------------
--- ## Start-up 
-if arg[0]:find"stats" then
-  math.randomseed(1234567891)
-  for k,v in pairs(arg) do
-    if go[v:sub(2)] then go[v:sub(2)](arg[k+1]) end end  end
-
-return Sample
 -------------------------------------------------------------------------------
 -- ## Test cases
 local function run(ss, dfun, nSeed,       ok,msg,fails)
@@ -397,44 +384,44 @@ local function run(ss, dfun, nSeed,       ok,msg,fails)
   print(yellow(fmt("%s failure(s)",fails)))
   os.exit(fails) end
 
-local Sample=require"stats"
-
 -- e.g. command line option `lua kseed.lua -header` calls `eg.header(_)`.
-function go.header(_,      data)
+go["--header"] = function(_,      data)
   data = Data:new(items({{"name","Age","Shoesize-"}}))
   print(o(data)) end
 
-function go.csv(file,    data,k)
+go["--csv"] = function(file,    data,k)
   k=0
   for row in csv(file or the.data) do
     k=k+1
     if k==1 or  k%30==0 then print(o(row)) end end end
 
-function go.data(file,   data) data= Data:new(csv(file or the.data))
+go["--data"] = function(file,   data) 
+  data= Data:new(csv(file or the.data))
   print(#data.rows, o(data.y)) end
 
-function go.xs(file,    data,X,XX)
+go["--xs"] = function(file,    data,X,XX)
   data= Data:new(csv(file or the.data))
   X = function(row) return data:xdist(data.rows[1], row) end
   XX= function(a,b) return X(a) < X(b) end
   for k,row in pairs(sort(data.rows,XX)) do
     if k==1 or k% 30==0 then print(o(row), X(row)) end end end
 
-function go.ys(file,    data,Y,YY)
+go["--ys"] = function(file,    data,Y,YY)
   data= Data:new(csv(file or the.data))
   Y = function(row) return data:ydist(row) end
   YY= function(a,b) return Y(a) < Y(b) end
   for k,row in pairs(sort(data.rows,YY)) do
     if k==1 or k% 30==0 then print(o(row), Y(row)) end end end
 
-function go.around(file,     data,Y)
+go["--around"] = function(file,     data,Y)
   data= Data:new(csv(file or the.data))
   Y = function(row) return data:ydist(row) end
   for _=1,20 do
     shuffle(data.rows)
     print(Y(sort(data:around(20),two(Y))[1])) end end
 
-function go.compare(file,  SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,want,rand,u,report)
+go["--compare"] = function(file)
+  local SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,want,rand,u,report
   SORTER=function(a,b)
            return a._meta.mu < b._meta.mu or
                  (a._meta.mu == b._meta.mu and a.txt < b.txt) end
@@ -480,12 +467,12 @@ function go.compare(file,  SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,wa
   print(table.concat(report,", ")) end
 
 go["--all"]= function(_)
-  run({"header","csv","data","xs","ys","around"}, go, the.seed) end
+  run({"--header","--csv","--data","--xs","--ys","--around"}, go, the.seed) end
 -------------------------------------------------------------------------------
 -- ## Start-up
 math.randomseed(the.rseed)
-if arg[0]:find"kseed" then
+if not pcall(debug.getlocal,4,1) then  -- if this code is in chage
   for k,v in pairs(arg) do
-    if go[v] then go[v](arg[k+1]) end end  end
+    if go[v] then go[v](arg[k+1]) end end end 
 
 return {the=the, Data=Data, Sym=Sym, Num=Num}
