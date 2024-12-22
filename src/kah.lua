@@ -86,7 +86,7 @@ function Cols:initialize(ss)--> Cols, col names in `ss` turned to Nums or Syms
   return self end 
 
 function Sample:new(s) 
-  return new(Sample,{txt=s, n=0, mu=0, m2=0, sd=0, lo=1E32,all={}}) end
+  return new(Sample,{txt=s, n=0, mu=0, m2=0, sd=0, lo=Big, hi=-Big, all={}}) end
 
 -- -----------------------------------------------------------------------------
 -- ## Code Conventions
@@ -277,8 +277,8 @@ local function adds(ns,     s)--> Sample. Load numbers in `ns` into a Sample.
   s=Sample(); for _,n in pairs(ns) do s:add(n) end; return s end
 
 -- Checks how rare are  the observed differences between samples of this data.
--- If not rare, then these sets are the same.
-local function boot(y0,z0,  straps,conf,     x,y,z,yhat,zhat,n,N)
+-- If not rare, then these sets are the same. From [4]
+local function boot(y0,z0,  straps,conf,     x,y,z,yhat,zhat,n)
   z,y,x = adds(z0), adds(y0), adds(y0, adds(z0))
   yhat  = map(y0, function(y1) return y1 - y.mu + x.mu end)
   zhat  = map(z0, function(z1) return z1 - z.mu + x.mu end)
@@ -290,7 +290,7 @@ local function boot(y0,z0,  straps,conf,     x,y,z,yhat,zhat,n,N)
 
 -- How central are `ys` items in `xs`? If central, then the sets are the  same.
 local function cliffs(xs,ys,  delta,      lt,gt,n)--> b. [5]
-  lt,gt,n,delta = 0,0,0,delta or 0.197
+  lt,gt,n,delta = 0,0,0,delta or 0.197 
   for _,x in pairs(xs) do
       for _,y in pairs(ys) do
         n = n + 1
@@ -298,29 +298,33 @@ local function cliffs(xs,ys,  delta,      lt,gt,n)--> b. [5]
         if y < x then lt = lt + 1 end end end
   return math.abs(gt - lt)/n <= delta end -- 0.195 
 
-function Sample:add(x,    d)
-  self.all[1+#self.all] = x
-	self.lo = math.min(self.lo,x)
+function Sample:add(n,    d)--> n. Update a Sample with `n`.
+  if x=="?" then return n end
   self.n  = self.n + 1
-  d       = x - self.mu
+  n       = n + 0 -- ensure we ahve numbers
+  local d = n - self.mu
   self.mu = self.mu + d / self.n
-  self.m2 = self.m2 + d * (x - self.mu)
-  self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^.5  end 
+  self.m2 = self.m2 + d * (n - self.mu)
+  self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^.5  
+  self.lo = math.min(n, self.lo)
+  self.hi = math.max(n, self.hi)
+  self.all[1+#self.all] = n 
+  return n end
 
-function Sample.delta(i,j)
+function Sample.delta(i,j)--> n. Report mean diffenrence, normalized by sd.
   return math.abs(i.mu - j.mu) / ((1E-32 + i.sd^2/i.n + j.sd^2/j.n)^.5) end
 
-function Sample:cohen(other,  d,     sd,i,j)
+function Sample:cohen(other,  d,     sd,i,j)--> b. Parametric effect size.
   i,j = self,other
   sd = (((i.n-1) * i.sd^2 + (j.n-1) * j.sd^2) / (i.n+j.n-2))^0.5
   return math.abs(i.mu - j.mu) <= (d or 0.35) * sd end
 
-function Sample:same(other,  delta,straps,conf,i,j)
+function Sample:same(other,  delta,straps,conf,i,j)--> b. Non parametric tests
   i,j = self,other
   return cliffs(i.all,j.all,delta) and boot(i.all,j.all,straps,conf) end
 
-function Sample:__tostring()
-  return string.format("Sample{%s %g %g %g}",self.txt,self.n,self.mu,self.sd) end
+function Sample:__tostring() --> s. Reports some details of Samples.
+  return fmt("Sample{%s %g %g %g}",self.txt,self.n,self.mu,self.sd) end
 
 function Sample:merge(other,eps,      i,j,k)
   i,j = self,other
