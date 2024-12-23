@@ -1,3 +1,7 @@
+Ever worry that our AI systems are 
+
+tdd: always leave one bug for tomorrow, so you can swapa in faster
+
 se is more than coding. personne;, product, process. some langauge features enable things that would be impossible otheriwsea be ahrd. e.g. erlang
 
 objects

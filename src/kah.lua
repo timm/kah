@@ -289,7 +289,7 @@ function Data:around(k,  rows,      z)--> rows
 --  __)   |_  (_|   |_  _> 
 
 local function adds(ns,     s)--> Sample. Load numbers in `ns` into a Sample.
-  s=Sample(); for _,n in pairs(ns) do s:add(n) end; return s end
+  s=Sample:new(); for _,n in pairs(ns) do s:add(n) end; return s end
 
 -- Checks how rare are  the observed differences between samples of this data.
 -- If not rare, then these sets are the same. From [4]
@@ -323,8 +323,7 @@ function Sample:add(n,    d)--> n. Update a Sample with `n`.
   self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^.5  
   self.lo = math.min(n, self.lo)
   self.hi = math.max(n, self.hi)
-  self.all[1+#self.all] = n 
-  return n end
+  return push(self.all, n) end
 
 function Sample.delta(i,j)--> n. Report mean difference, normalized by sd.
   return math.abs(i.mu - j.mu) / ((1E-32 + i.sd^2/i.n + j.sd^2/j.n)^.5) end
@@ -439,8 +438,12 @@ go["--stats2"]=function(_,dot,t,u)
      t = Sample:new(); for i=1,50 do t:add( normal(5,1) + normal(10,2)^2) end
      u = Sample:new(); for _,x in pairs(t.all) do u:add( x*d) end
      print(fmt("%.3f\t%s\t%s\t%s\t%s",
-                         d,dot(cliffs(t.all,u.all)),dot(boot(t.all,u.all)), 
-                           dot(t:same(u)), dot(t:cohen(u)))) end  end
+                         d,
+                         dot(cliffs(t.all,u.all)),
+                         dot(boot(t.all,u.all)), 
+                         dot(t:same(u)),
+                         dot(t:cohen(u))
+                         )) end  end
 
 go["--compare"] = function(file)
   local SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,want,rand,u,report
