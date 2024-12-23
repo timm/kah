@@ -1,3 +1,4 @@
+ -- nvim --clean -c "colorscheme lunaperche" -c "set number"
 local the,go={},{}
 go["-h"]= function(_) print(string.format([[
 
