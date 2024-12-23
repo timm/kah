@@ -27,6 +27,9 @@ push: ## commit to main
 	- echo -en "$(LOUD)Why this push? $(SOFT)" ;  read x ; git commit -am "$$x" ;  git push
 	- git status
 
+word: ## commit to main
+	- echo -en "$(LOUD)phrase? $(SOFT)" ;  read x ; figlet -W -f mini $$x | gawk '{print "-- " $$0}' |pbcopy
+
 ../docs/%.html : ../src/%.md    
 	1>&2 echo "... $@"
 	sed -e '1d' -e '2d' $< | pandoc  -o $@ $(Pandoc)

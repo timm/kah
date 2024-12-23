@@ -40,6 +40,7 @@ go["-r"]= function(s) the.rseed = s+0; math.randomseed(the.rseed) end
 -- -----------------------------------------------------------------------------
 -- ### Structs
 local Num, Sym, Data, Cols, Sample = {},{},{},{},{}
+local new,push
 
 function Sym:new(s,n) -- Summarize numeric columns
   return new(Sym,{
@@ -52,25 +53,25 @@ function Sym:new(s,n) -- Summarize numeric columns
 
 function Num:new(s,n) -- Summarize numeric columns
   return new(Num,{
-      txt = s         -- text about this column
-      pos = n or 0    -- column number
+      txt = s,         -- text about this column
+      pos = n or 0 ,   -- column number
       n = 0,          -- how many items?
       lo= Big,        -- smallest number seen in a column
       hi= -Big,       -- largest number seen in a column
       utopia = (s or ""):find"-$" and 0 or 1, -- (min|max)imize = 0,1
       mu= 0,          -- mean
-      m2= 0,          -- second moment (used for sd calcualtion)
-      sd= 0 }) end    -- standard deviaton
+      m2= 0,          -- second moment (used for sd calculation)
+      sd= 0 }) end    -- standard deviation
 
 function Data:new(src) -- Holds the rows and column summaries.
-  self = new(Data, {col = Cols:new(src()), -- column informations
-                    rows={} })              -- set of rows
+  self = new(Data, {cols = Cols:new(src()), -- column information
+                    rows={} })             -- set of rows
   return self:adds(src) end
 
 function Cols:new(ss) -- Make and store Nums and Syms
   return new(Cols, {
       names = ss,     -- all the names
-      klass = nothing -- klass column, if it exists
+      klass = nil,   -- klass column, if it exists
       all   = {},     -- all the cols
       x     = {},     -- the independent columns
       y     = {}}    -- the dependent columns
@@ -116,9 +117,12 @@ function Sample:new(s)
 -- [5] https://journals.sagepub.com/doi/pdf/10.3102/10769986025002101, table1
 
 -------------------------------------------------------------------------------
--- ## Lib
+--             
+--  |   o  |_  
+--  |_  |  |_) 
+
 -- ### Lists
-local function push(a,x)--> x,  added to end of `a`.
+function push(a,x)--> x,  added to end of `a`.
   a[1+#a] =x; return x end
 
 local function any(a)--> x (any items of `a`)
@@ -127,18 +131,18 @@ local function any(a)--> x (any items of `a`)
 local function many(a,n,   z)--> a (`n` random items from `a`).
   z={}; for i = 1,(n or #a) do z[i]=any(a) end; return z end
 
-local function items(a,    n)--> f.  Iterator for arrays.
-  n=0; return function() n=n+1; if n <= #a then return a[i] end end end
+local function items(a,    i)--> f.  Iterator for arrays.
+  i=0; return function() i=i+1; if i <= #a then return a[i] end end end
 
 -- ### Sort
 local function two(f)--> f, sorted by `f(x) < f(y)`.
   return function(p,q) return f(p) < f(q) end end
 
 local function lt(x)--> f, sorted by  `p[s] < q[s]`.  
-  return function(p,q) return p[s] < q[s] end end
+  return function(p,q) return p[x] < q[x] end end
 
-local function gt(s)--> f,  sorted by  `a1[s] > a2[s]`.  
-  return function(a1,a2) return a1[s] > a2[s] end end
+local function gt(x)--> f,  sorted by  `a1[s] > a2[s]`.  
+  return function(a1,a2) return a1[x] > a2[x] end end
 
 local function sort(a,f)--> a, sorted via `f`. 
   table.sort(a,f); return a end
@@ -180,7 +184,7 @@ local function csv(sFile,     f, src)--> f (iterator for csv rows)
   src = io.input(sFile)
   return function(      s1)
     s1 = io.read()
-    if s then return f(s1,{}) else io.close(src) end end  end
+    if s1 then return f(s1,{}) else io.close(src) end end  end
 
 local function o(x,          t,LIST,DICT)--> s. Generate a string for `x`.
   LIST= function() for k,v in pairs(x) do t[1+#t]= o(v) end end
@@ -192,15 +196,18 @@ local function o(x,          t,LIST,DICT)--> s. Generate a string for `x`.
   return "{" .. table.concat(t, " ") .. "}" end
 
 -- ### Polymorphism
-local function new(methods, a)--a, attached to a delegation table of `methods`.
+function new(methods, a)--a, attached to a delegation table of `methods`.
   methods.__index = methods
   methods.__tostring = methods.__tostring or o
   return setmetatable(a,methods) end
 
 --------------------------------------------------------------------------------
--- ## Update
+--  | |  ._    _|   _.  _|_   _  
+--  |_|  |_)  (_|  (_|   |_  (/_ 
+--       |                       
+
 function Sym:add(x)--> x. Updates Sym
-  if x=="?" then return n end
+  if x=="?" then return x end
   self.n = self.n + 1
   self.has[x] = 1 + (self.has[x] or 0)
   if self.has[x] > self.most then
@@ -208,12 +215,12 @@ function Sym:add(x)--> x. Updates Sym
   return x end
 
 function Num:add(n)--> n. Updates Num using Welford's algorithm [3].
-  if x=="?" then return n end
+  if n=="?" then return n end
   self.n  = self.n + 1
   n       = n + 0 -- ensure we have numbers
-  local d = n - self.mu
-  self.mu = self.mu + d/self.n
-  self.m2 = self.m2 + d*(n - self.mu)
+  local delta = n - self.mu
+  self.mu = self.mu + delta/self.n
+  self.m2 = self.m2 + delta*(n - self.mu)
   self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^0.5
   self.lo = math.min(n, self.lo)
   self.hi = math.max(n, self.hi)
@@ -229,7 +236,10 @@ function Data:adds(src)--> Data, updated with many rows
   return self end
 
 -------------------------------------------------------------------------------
--- ## Distance
+--   _                                 
+--  | \  o   _  _|_   _.  ._    _   _  
+--  |_/  |  _>   |_  (_|  | |  (_  (/_ 
+
 function Num:normalize(n)--> 0...1
   return n=="?" and n or (n - self.lo) / (self.hi - self.lo) end
 
@@ -244,13 +254,13 @@ function Sym:dist(p,q)--> n. Distance between two symbols.
   if p=="?" and q=="?" then return 1 end -- if all unknown, assume max
   return p==q and 0 or 1 end
 
-function Data:xdist(row1,row2,    d)--> n. Gap between x cols of rows [2].
+function Data:xdist(row1,row2,    d,f)--> n. Gap between x cols of rows [2].
   d,f = 0,function(col) return col:dist(row1[col.pos], row2[col.pos]) end
   for _,col in pairs(self.cols.x) do d = d + math.abs(f(col)) ^ the.p end
   return (d/#self.cols.x) ^ (1/the.p) end 
 
-function Data:ydist(row,    d)--> n. Distance of y cols to utopia points.
-  d,f = 0,function(col) col:normalize(row[col.pos]) - col.utopia end
+function Data:ydist(row,    d,f)--> n. Distance of y cols to utopia points.
+  d,f = 0,function(col) return col:normalize(row[col.pos]) - col.utopia end
   for _,col in pairs(self.cols.y) do d = d + math.abs(f(col)) ^ the.p end
   return (d/#self.cols.y) ^ (1/the.p) end
 
@@ -258,7 +268,7 @@ function Data:ydist(row,    d)--> n. Distance of y cols to utopia points.
 function Data:around(k,  rows,      z)--> rows
   rows = rows or self.rows
   z = {any(rows)}
-  for _ = 2,k do
+  for _ = 2,k do 
     local all,u = 0,{}
     for _ = 1,math.min(the.samples, #rows) do
       local row = any(rows)
@@ -267,12 +277,16 @@ function Data:around(k,  rows,      z)--> rows
          all = all + push(u,{row=row, d=self:xdist(row,closest)^2}).d end
     end
     local r = math.random()
-    for _,x in pairs(all) do
+    for _,x in pairs(u) do
       r = r - x.d / all
-      if r <= 0 then push(z, x.row); break end end end 
+      if r <= 0 then push(z, x.row); break end end end
   return z end
 
--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--   __                    
+--  (_   _|_   _.  _|_   _ 
+--  __)   |_  (_|   |_  _> 
+
 local function adds(ns,     s)--> Sample. Load numbers in `ns` into a Sample.
   s=Sample(); for _,n in pairs(ns) do s:add(n) end; return s end
 
@@ -284,7 +298,7 @@ local function boot(y0,z0,  straps,conf,     x,y,z,yhat,zhat,n)
   zhat  = map(z0, function(z1) return z1 - z.mu + x.mu end)
   n     = 0 
   for _ = 1,(straps or 512)  do
-    if adds(l.many(yhat)):delta(adds(l.many(zhat))) > y:delta(z) 
+    if adds(many(yhat)):delta(adds(many(zhat))) > y:delta(z) 
     then n=n+1 end end
   return n / (straps or 512) >= (conf or 0.05)  end
 
@@ -299,19 +313,19 @@ local function cliffs(xs,ys,  delta,      lt,gt,n)--> b. [5]
   return math.abs(gt - lt)/n <= delta end -- 0.195 
 
 function Sample:add(n,    d)--> n. Update a Sample with `n`.
-  if x=="?" then return n end
+  if n=="?" then return n end
   self.n  = self.n + 1
-  n       = n + 0 -- ensure we ahve numbers
-  local d = n - self.mu
-  self.mu = self.mu + d / self.n
-  self.m2 = self.m2 + d * (n - self.mu)
+  n       = n + 0 -- ensure we have numbers
+  local delta = n - self.mu
+  self.mu = self.mu + delta / self.n
+  self.m2 = self.m2 + delta * (n - self.mu)
   self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^.5  
   self.lo = math.min(n, self.lo)
   self.hi = math.max(n, self.hi)
   self.all[1+#self.all] = n 
   return n end
 
-function Sample.delta(i,j)--> n. Report mean diffenrence, normalized by sd.
+function Sample.delta(i,j)--> n. Report mean difference, normalized by sd.
   return math.abs(i.mu - j.mu) / ((1E-32 + i.sd^2/i.n + j.sd^2/j.n)^.5) end
 
 function Sample:cohen(other,  d,     sd,i,j)--> b. Parametric effect size.
@@ -345,7 +359,7 @@ function Sample.merges(samples,eps,     pos,t,merged,sample)
   for _,two in pairs(pos) do 
 	   sample = two[1]
      sample._meta = t[two[2]]
-     sample._meta.rank  = string.format("%c",96 + two[2]) end
+     sample._meta.rank  = fmt("%c",96 + two[2]) end
   return samples end
 
 local function normal(mu,sd,    r)
@@ -353,34 +367,15 @@ local function normal(mu,sd,    r)
                                  * math.cos(2*math.pi*math.random()) end
 
 -------------------------------------------------------------------------------
-local go={}
-
-function go.eg1(_,s,r)
-  r=5
-	print("r",string.format("\tmu\t\tsd")) 
-	while r < 50000 do
-	  r=r*2
-	  s=Sample:new()
-	  for i=1,r do s:add(normal(100,20)) end
-	  print(r,string.format("\t%g\t\t%g",s.mu, s.sd)) end end
-
-function go.eg2(_,dot,t,u)
-  dot = function(s) return s and "y" or "." end
-  print("d\tclif\tboot\tsame\tcohen")
-  for d =1,1.25,0.02 do
-     t = Sample:new(); for i=1,50 do t:add( normal(5,1) + normal(10,2)^2) end
-     u = Sample:new(); for _,x in pairs(t.all) do u:add( x*d) end
-     print(string.format("%.3f\t%s\t%s\t%s\t%s",
-                         d,dot(cliffs(t.all,u.all)),dot(boot(t.all,u.all)), 
-                           dot(t:same(u)), dot(t:cohen(u)))) end  end
-
--------------------------------------------------------------------------------
--- ## Test cases
-local function run(ss, dfun, nSeed,       ok,msg,fails)
+--  ___                                       
+--   |    _    _  _|_     _   _.   _   _    _ 
+--   |   (/_  _>   |_    (_  (_|  _>  (/_  _> 
+                                           
+local function run(ss, funs, rSeed,       ok,msg,fails)
   fails = 0
   for _,one in pairs(ss) do
-    math.randomseed(sSeed or 1234567891)
-    ok,msg = xpcall(dfun[one], debug.traceback)
+    math.randomseed(rSeed or 1234567891)
+    ok,msg = xpcall(funs[one], debug.traceback)
     if   ok == false 
     then print(red("FAILURE for '"..one.."' :"..msg)); fails=fails + 1
     else print(green("pass for '"..one.."'")) end 
@@ -388,20 +383,23 @@ local function run(ss, dfun, nSeed,       ok,msg,fails)
   print(yellow(fmt("%s failure(s)",fails)))
   os.exit(fails) end
 
--- e.g. command line option `lua kseed.lua -header` calls `eg.header(_)`.
+-- e.g. command line option `lua kseed.lua --the` calls `go["--the"]()`
+go["--the"] = function(_)  print(o(the)) end
+
 go["--header"] = function(_,      data)
   data = Data:new(items({{"name","Age","Shoesize-"}}))
-  print(o(data)) end
+  for k,col in pairs(data.cols.x) do print("x",k,col) end 
+  for k,col in pairs(data.cols.y) do print("y",k,col) end end
 
 go["--csv"] = function(file,    data,k)
   k=0
   for row in csv(file or the.data) do
     k=k+1
-    if k==1 or  k%30==0 then print(o(row)) end end end
+    if k==1 or k%30==0 then print(o(row)) end end end
 
 go["--data"] = function(file,   data) 
   data= Data:new(csv(file or the.data))
-  print(#data.rows, o(data.y)) end
+  print(#data.rows, o(data.cols.y[1])) end
 
 go["--xs"] = function(file,    data,X,XX)
   data= Data:new(csv(file or the.data))
@@ -424,7 +422,26 @@ go["--around"] = function(file,     data,Y)
     shuffle(data.rows)
     print(Y(sort(data:around(20),two(Y))[1])) end end
 
-go["--compare"] = function(file)
+go["--stats1"] =function(_,s,r)
+  r=5
+	print("r",fmt("\tmu\t\tsd")) 
+	while r < 50000 do
+	  r=r*2
+	  s=Sample:new()
+	  for i=1,r do s:add(normal(100,20)) end
+	  print(r,fmt("\t%g\t\t%g",s.mu, s.sd)) end end
+
+go["--stats2"]=function(_,dot,t,u)
+  dot = function(s) return s and "y" or "." end
+  print("d\tclif\tboot\tsame\tcohen")
+  for d =1,1.25,0.02 do
+     t = Sample:new(); for i=1,50 do t:add( normal(5,1) + normal(10,2)^2) end
+     u = Sample:new(); for _,x in pairs(t.all) do u:add( x*d) end
+     print(fmt("%.3f\t%s\t%s\t%s\t%s",
+                         d,dot(cliffs(t.all,u.all)),dot(boot(t.all,u.all)), 
+                           dot(t:same(u)), dot(t:cohen(u)))) end  end
+
+go["--compare"] = function(file)
   local SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,want,rand,u,report
   SORTER=function(a,b)
            return a._meta.mu < b._meta.mu or
@@ -471,11 +488,15 @@ go["--compare"] = function(file)
   print(table.concat(report,", ")) end
 
 go["--all"]= function(_)
-  run({"--header","--csv","--data","--xs","--ys","--around"}, go, the.seed) end
+  run({"--header","--csv","--data","--xs","--ys","--around"}, go, the.rseed) end
 -------------------------------------------------------------------------------
--- ## Start-up
+--   __                                
+--  (_   _|_   _.  ._  _|_         ._  
+--  __)   |_  (_|  |    |_    |_|  |_) 
+--                                 |   
+
 math.randomseed(the.rseed)
-if not pcall(debug.getlocal,4,1) then  -- if this code is in chage
+if not pcall(debug.getlocal,4,1) then  -- if this code is in charge
   for k,v in pairs(arg) do
     if go[v] then go[v](arg[k+1]) end end end 
 
