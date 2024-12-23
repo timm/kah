@@ -9,11 +9,16 @@ USAGE:
   lua kah.lua [OPTIONS] [DEMO]
 
 OPTIONS:
-  -h       print help
-  -d file  csv file of data (default: %s)
-  -p int   coefficient of distance (default: %s)
-  -r int   random number seed  (default: %s)
-  -s int   #samples searched for each new centroid (default: %s)
+  -h        print help
+  -k int    Bayes control  (default: %s)
+  -m int    Bayes control (default: %s)
+  -d file   csv file of data (default: %s)
+  -p int    coefficient of distance (default: %s)
+  -r int    random number seed  (default: %s)
+  -s int    #samples searched for each new centroid (default: %s)
+  -b int    initial evaulation budget (default: %s)
+  -B int    max evaulation budget (default: %s)
+  -T float  ration of training data (defalt: %s)
 
 DEMO:
   --header          header generation
@@ -22,26 +27,149 @@ DEMO:
   --x      [file]   sorting rows by x values
   --y      [file]   sorting rows by y values
   --around [file]   find very good examples via kmeans++ initialization
-
-]], the.data, the.p, the.rseed, the.samples)) end
+]], the.k, the.m, the.data, the.p, the.rseed, the.samples,
+    the.budget, the.Budget, the.Trainings)) end
 
 -- ## Config 
 the= {p= 2,
+       k =1, m=2, -- Bayes control
       data= "../../moot/optimize/misc/auto93.csv",
       rseed= 1234567891,
+      Trainings=0.33, budget=4, Budget=25,-- active learning control
       samples= 32}
 
 local Big=1E32
 
-go["-p"]= function(s) the.p = s+0 end
+go["-b"]= function(s) the.budget = s+0 end
+go["-B"]= function(s) the.Budget = s+0 end
 go["-d"]= function(s) the.data = s end
-go["-s"]= function(s) the.samples = s+0 end
+go["-k"]= function(s) the.k = s+0 end
+go["-m"]= function(s) the.m = s+0 end
+go["-p"]= function(s) the.p = s+0 end
 go["-r"]= function(s) the.rseed = s+0; math.randomseed(the.rseed) end
+go["-s"]= function(s) the.samples = s+0 end
+go["-T"]= function(s) the.Trainings = s+0 end
 
 -- -----------------------------------------------------------------------------
+-- ## Code Conventions
+-- 
+-- - Constructors are functions with Upper case names; e.g. Num()
+-- - Optional args denoted by 2 blanks
+-- - Local variables denotes by 4 spaces.
+-- - In function argument lists, for non-local vars
+--   - n=num, s=string, b=bool,a=array,f=fun, x=anything;   
+--     e.g. sfile is a string that is a file name
+--   - u is an output array.
+--   - d=dict,t=a or d,
+--   - ns,ss,bs = array of num,s,bs
+--   - nums,cols,datas = array of Num, Cols, Datas
+-- - Often, 
+--   - i,j,are loop counters
+--   - k,v are key value pairs from dict.
+--   - e,g,h,m,p,q,r,u,w,x,y are anything at all
+--   - z is a variable catching the output
+--
+-- ## References
+--
+-- [1] https://en.wikipedia.org/wiki/Fisher-Yates_shuffle
+-- [2] https://link.springer.com/article/10.1007/BF00153759, section 2.4
+-- [3] http://tiny.cc/welford, 
+-- [4] chapter 20. https://doi.org/10.1201/9780429246593
+-- [5] https://journals.sagepub.com/doi/pdf/10.3102/10769986025002101,table1
+-- [6] p4 of Yang, Ying, and Geoffrey I. Webb. "A comparative study of 
+--     discretization methods for naive-bayes classifiers." PKAW'02. 
+
+-------------------------------------------------------------------------------
+--             
+--  |   o  |_  
+--  |_  |  |_) 
+
+-- ### Lists
+function push(a,x)--> x,  added to end of `a`.
+  a[1+#a] =x; return x end
+
+local function any(a)--> x (any items of `a`)
+  return a[math.random(#a)] end
+
+local function many(a,n,   z)--> a (`n` random items from `a`).
+  z={}; for i = 1,(n or #a) do z[i]=any(a) end; return z end
+
+local function items(a,    i)--> f.  Iterator for arrays.
+  i=0; return function() i=i+1; if i <= #a then return a[i] end end end
+
+local function split(a,n)--> a,a. Return all before and after `n`th item.
+  local u,v = {},{}; for j,x in pairs(a) do push(j <= n and u or v, x) end
+  return u,v end
+
+-- ### Map
+local function sum(a,f,     n)--> a. Return sum of items in `a` filtered by `f`.
+  n=0; for _,x in pairs(a) do n = n + f(x) end ; return n end
+
+local function map(a,f,     z)--> a. Return items in `a` filtered through `f`.
+  z={}; for _,x in pairs(a) do z[1+#z]=f(x) end ; return z end
+
+local function min(a,f,      n,lo,z)--> x (item in `a` that scores least on `f`).
+  lo = math.huge
+  for _,x in pairs(a) do
+    n = f(x)
+    if n < lo then lo,z = n,x end end
+  return z end
+
+-- ### Sort
+local function two(f)--> f, sorted by `f(x) < f(y)`.
+  return function(p,q) return f(p) < f(q) end end
+
+local function lt(x)--> f, sorted by  `p[s] < q[s]`.  
+  return function(p,q) return p[x] < q[x] end end
+
+local function gt(x)--> f,  sorted by  `a1[s] > a2[s]`.  
+  return function(a1,a2) return a1[x] > a2[x] end end
+
+local function sort(a,f)--> a, sorted via `f`. 
+  table.sort(a,f); return a end
+
+local function keysort(a,f)--> a. Sorted via single argument function `f`.
+  local decorate   = function(x) return {f(x),x} end
+  local undecorate = function(x) return x[2] end
+  return map(sort(map(a, decorate), lt(1)), undecorate) end
+
+local function shuffle(a,    j)--> a, randomly re-ordered via Fisher-Yates [1]. 
+  for i= #a,2,-1 do j= math.random(i); a[i], a[j] = a[j], a[i] end; return a end
+
+-- ## Strings to Things (and back again)
+local function yellow(s) return "\27[33m" .. s .. "\27[0m" end
+local function green(s)  return "\27[32m" .. s .. "\27[0m" end
+local function red(s)    return "\27[31m" .. s .. "\27[0m" end
+
+local function csv(sFile,     f, src)--> f (iterator for csv rows)
+  f = function(s2,z)
+        for s3 in s2:gmatch"([^,]+)" do z[1+#z]=s3:match"^%s*(.-)%s*$" end
+        return z end
+  src = io.input(sFile)
+  return function(      s1)
+    s1 = io.read()
+    if s1 then return f(s1,{}) else io.close(src) end end  end
+
+local fmt=string.format
+
+local function o(x,          t,LIST,DICT)--> s. Generate a string for `x`.
+  LIST= function() for k,v in pairs(x) do t[1+#t]= o(v) end end
+  DICT= function() for k,v in pairs(x) do t[1+#t]= fmt(":%s %s",k,o(v)) end end
+  t   = {}
+  if type(x) == "number" then return fmt(x//1 == x and "%s" or "%.3g",x) end
+  if type(x) ~= "table"  then return tostring(x) end
+  if #x>0 then LIST() else DICT(); table.sort(t) end
+  return "{" .. table.concat(t, " ") .. "}" end
+
+-- ### Polymorphism
+function new(methods, a)--a, attached to a delegation table of `methods`.
+  methods.__index = methods
+  methods.__tostring = methods.__tostring or o
+  return setmetatable(a,methods) end
+
+-- -----------------------------------------------------------------------------
 -- ### Structs
 local Num, Sym, Data, Cols, Sample = {},{},{},{},{}
-local new,push
 
 function Sym:new(s,n) -- Summarize numeric columns
   return new(Sym,{
@@ -69,6 +197,10 @@ function Data:new(src) -- Holds the rows and column summaries.
                     rows={} })             -- set of rows
   return self:adds(src) end
 
+function Data:clone( rows)--> Data. Copies self's column structure.
+  self = new(Data, {cols = Cols:new(self.cols.names), rows={} })   
+  return self:adds(items(rows))  end
+
 function Cols:new(ss) -- Make and store Nums and Syms
   return new(Cols, {
       names = ss,     -- all the names
@@ -90,119 +222,8 @@ function Cols:initialize(ss)--> Cols, col names in `ss` turned to Nums or Syms
 function Sample:new(s)--> Sample. Like Num, but also keeps all the nums.
   return new(Sample,{txt=s, n=0, mu=0, m2=0, sd=0, lo=Big, hi=-Big, all={}}) end
 
--- -----------------------------------------------------------------------------
--- ## Code Conventions
--- 
--- - Constructors are functions with Upper case names; e.g. Num()
--- - Optional args denoted by 2 blanks
--- - Local variables denotes by 4 spaces.
--- - In function argument lists, for non-local vars
---   - n=num, s=string, b=bool,a=array,f=fun, x=anything;   
---     e.g. sfile is a string that is a file name
---   - u is an output array.
---   - d=dict,t=a or d,
---   - ns,ss,bs = array of num,s,bs
---   - nums,cols,datas = array of Num, Cols, Datas
--- - Often, 
---   - i,j,are loop counters
---   - k,v are key value pairs from dict.
---   - e,g,h,m,p,q,r,u,w,x,y are anything at all
---   - z is a variable catching the output
---
--- ## References
---
--- [1] https://en.wikipedia.org/wiki/Fisher-Yates_shuffle
--- [2] https://link.springer.com/article/10.1007/BF00153759, section 2.4
--- [3] http://tiny.cc/welford, 
--- [4] chapter 20. https://doi.org/10.1201/9780429246593
--- [5] https://journals.sagepub.com/doi/pdf/10.3102/10769986025002101, table1
 
--------------------------------------------------------------------------------
---             
---  |   o  |_  
---  |_  |  |_) 
-
--- ### Lists
-function push(a,x)--> x,  added to end of `a`.
-  a[1+#a] =x; return x end
-
-local function any(a)--> x (any items of `a`)
-  return a[math.random(#a)] end
-
-local function many(a,n,   z)--> a (`n` random items from `a`).
-  z={}; for i = 1,(n or #a) do z[i]=any(a) end; return z end
-
-local function items(a,    i)--> f.  Iterator for arrays.
-  i=0; return function() i=i+1; if i <= #a then return a[i] end end end
-
--- ### Sort
-local function two(f)--> f, sorted by `f(x) < f(y)`.
-  return function(p,q) return f(p) < f(q) end end
-
-local function lt(x)--> f, sorted by  `p[s] < q[s]`.  
-  return function(p,q) return p[x] < q[x] end end
-
-local function gt(x)--> f,  sorted by  `a1[s] > a2[s]`.  
-  return function(a1,a2) return a1[x] > a2[x] end end
-
-local function sort(a,f)--> a, sorted via `f`. 
-  table.sort(a,f); return a end
-
-local function shuffle(a,    j)--> a, randomly re-ordered via Fisher-Yates [1]. 
-  for i= #a,2,-1 do j= math.random(i); a[i], a[j] = a[j], a[i] end; return a end
-
--- ### Map
-local function map(a,f,     z)--> a. Return items in `a` filtered through `f`.
-  z={}; for _,x in pairs(a) do z[1+#z]=f(x) end ; return z end
-
-local function min(a,f,      n,lo,z)--> x (item in `a` that scores least on `f`).
-  lo = math.huge
-  for _,x in pairs(a) do
-    n = f(x)
-    if n < lo then lo,z = n,x end end
-  return z end
-
--- local function pick(d,     u,r,all,anything)--> x (a key in `d`) bias by `d`'s vals
---   u,all={},0
---   for x,n in pairs(d) do push(u,{n,x}); all= all + n end
---   r = math.random()
---   for _,xn in pairs(sort(u,gt(1))) do
---     r = r - xn[1]/all
---     if r <= 0 then return xn[2] else anything = anything or xn[2] end end
---   return anything end
--- 
--- ## Strings to Things (and back again)
-local fmt=string.format
-
-local function yellow(s) return "\27[33m" .. s .. "\27[0m" end
-local function green(s)  return "\27[32m" .. s .. "\27[0m" end
-local function red(s)    return "\27[31m" .. s .. "\27[0m" end
-
-local function csv(sFile,     f, src)--> f (iterator for csv rows)
-  f = function(s2,z)
-        for s3 in s2:gmatch"([^,]+)" do z[1+#z]=s3:match"^%s*(.-)%s*$" end
-        return z end
-  src = io.input(sFile)
-  return function(      s1)
-    s1 = io.read()
-    if s1 then return f(s1,{}) else io.close(src) end end  end
-
-local function o(x,          t,LIST,DICT)--> s. Generate a string for `x`.
-  LIST= function() for k,v in pairs(x) do t[1+#t]= o(v) end end
-  DICT= function() for k,v in pairs(x) do t[1+#t]= fmt(":%s %s",k,o(v)) end end
-  t   = {}
-  if type(x) == "number" then return fmt(x//1 == x and "%s" or "%.3g",x) end
-  if type(x) ~= "table"  then return tostring(x) end
-  if #x>0 then LIST() else DICT(); table.sort(t) end
-  return "{" .. table.concat(t, " ") .. "}" end
-
--- ### Polymorphism
-function new(methods, a)--a, attached to a delegation table of `methods`.
-  methods.__index = methods
-  methods.__tostring = methods.__tostring or o
-  return setmetatable(a,methods) end
-
---------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 --  | |  ._    _|   _.  _|_   _  
 --  |_|  |_)  (_|  (_|   |_  (/_ 
 --       |                       
@@ -236,7 +257,7 @@ function Data:adds(src)--> Data, updated with many rows
   for a in src  do self:add(a) end
   return self end
 
--------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 --   _                                 
 --  | \  o   _  _|_   _.  ._    _   _  
 --  |_/  |  _>   |_  (_|  | |  (_  (/_ 
@@ -275,14 +296,63 @@ function Data:around(k,  rows,      z)--> rows
       local row = any(rows)
       local closest = min(z, function(maybe) return self:xdist(row,maybe) end) 
       if row and closest then
-         all = all + push(u,{row=row, d=self:xdist(row,closest)^2}).d end
-    end
-    local r = math.random()
+         all = all + push(u,{row=row, d=self:xdist(row,closest)^2}).d end end
+    local r = all * math.random()
     for _,x in pairs(u) do
-      r = r - x.d / all
+      r = r - x.d
       if r <= 0 then push(z, x.row); break end end end
   return z end
 
+-------------------------------------------------------------------------------
+--   _                    
+--  |_)   _.       _    _ 
+--  |_)  (_|  \/  (/_  _> 
+--            /           
+
+function Sym:like(x,nPrior)--> n. How much this `Sym` likes this `n`. [6]
+  return  ((self.has[x] or 0) + the.m*nPrior) / (self.n + the.m)  end
+
+function Num:like(x,_,      v,tmp)--> n. How much this `Num` likes this `n`.
+  v = self.sd^2 + 1/Big
+  tmp = math.exp(-1*(x - self.mu)^2/(2*v)) / (2*math.pi*v) ^ 0.5
+  return math.max(0, math.min(1, tmp + 1/Big)) end
+
+function Data:loglike(row, nall, nh)--> n. How much does Data likes row? 
+  local prior,f,l
+  prior = (#self.rows + the.k) / (nall + the.k*nh)
+  f     = function(x) return l( x:like(row[x.pos], prior) ) end
+  l     = function(n) return n>0 and math.log(n) or 0 end
+  return l(prior) + sum(self.cols.x, f) end
+
+-- 1. Sort a few labelled few examples. 
+-- 2. split them  into best and rest.
+-- 3. Use that split to  build a two-class classifier. 
+-- 4. Use that classifier to sort the unlabelled
+--    examples by their likelihood of belong to best, not rest. 
+-- 5. Label the first and last items in that sort.
+-- 6. If can you label more items, then go to 2. Else...
+-- 7. ... use the classifier to sort the remaining
+--    unlabelled examples. Report the best in that test set.
+function Data:acquire()
+  local Y,B,R,BR,test,train,todo,done,best,rest,n,_
+  Y  = function(r) return self:ydist(r) end
+  B  = function(r) return best:loglike(r, #done, 2) end
+  R  = function(r) return rest:loglike(r, #done, 2) end
+  BR = function(r) return B(r) - R(r) end
+  n  = math.min(500, the.Trainings * #self.rows)
+  train,test = split(shuffle(self.rows), n)
+  test, _    = split(test, math.min(500,#test))
+  done,todo  = split(train, the.budget)            --- [1]
+  while true do
+    done = keysort(done,Y)
+    if #done > the.Budget - 4 or #todo < 5 then break end --- [6]
+    best,rest = split(done, math.sqrt(#done))          --- [2]
+    best, rest = self:clone(best), self:clone(rest)  --- [3]
+    todo = keysort(todo,BR)                       --- [4]
+    for _=1,2 do                                    --- [5]
+      push(done, table.remove(todo)); 
+      push(done, table.remove(todo,1)) end end
+  return done, test, BR end     --- [7]
 --------------------------------------------------------------------------------
 --   __                    
 --  (_   _|_   _.  _|_   _ 
@@ -445,7 +515,21 @@ go["--stats2"]=function(_,dot,t,u)
                          dot(t:cohen(u))
                          )) end  end
 
-go["--compare"] = function(file)
+go["--acquire"] = function(file,    data,Y,done)
+  data= Data:new(csv(file or the.data))
+  Y = function(row) return data:ydist(row) end
+  for i=1,20 do
+    done = data:acquire() 
+    print(Y(keysort(done,Y)[1])) end  end
+
+go["--compare"] = function(file,    data,Y,done)
+  data= Data:new(csv(file or the.data))
+  Y = function(row) return data:ydist(row) end
+  for i=1,20 do
+    done = data:around(25) 
+    print(Y(keysort(done,Y)[1])) end  end
+
+go["--compares"] = function(file)
   local SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,want,rand,u,report
   SORTER=function(a,b)
            return a._meta.mu < b._meta.mu or
