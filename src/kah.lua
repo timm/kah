@@ -87,7 +87,7 @@ function Cols:initialize(ss)--> Cols, col names in `ss` turned to Nums or Syms
       if s:find"!$" then self.klass = col end end end    -- keep the klass
   return self end 
 
-function Sample:new(s) 
+function Sample:new(s)--> Sample. Like Num, but also keeps all the nums.
   return new(Sample,{txt=s, n=0, mu=0, m2=0, sd=0, lo=Big, hi=-Big, all={}}) end
 
 -- -----------------------------------------------------------------------------
