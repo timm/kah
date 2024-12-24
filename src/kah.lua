@@ -10,6 +10,7 @@ USAGE:
 
 OPTIONS:
   -h        print help
+  -a str    acquire via adapt,xplore,xplore (default: %s)
   -k int    Bayes control  (default: %s)
   -m int    Bayes control (default: %s)
   -d file   csv file of data (default: %s)
@@ -18,7 +19,9 @@ OPTIONS:
   -s int    #samples searched for each new centroid (default: %s)
   -b int    initial evaulation budget (default: %s)
   -B int    max evaulation budget (default: %s)
-  -T float  ration of training data (defalt: %s)
+  -T float  ratio of training data (default: %s)
+  -f far    how far to lok for distant points (default: %s)
+  -l int    max length of branches (default: %s)
 
 DEMO:
   --header          header generation
@@ -27,23 +30,28 @@ DEMO:
   --x      [file]   sorting rows by x values
   --y      [file]   sorting rows by y values
   --around [file]   find very good examples via kmeans++ initialization
-]], the.k, the.m, the.data, the.p, the.rseed, the.samples,
-    the.budget, the.Budget, the.Trainings)) end
+]], the.acquire, the.k, the.m, the.data, the.p, the.rseed, the.samples,
+    the.budget, the.Budget, the.Trainings, the.far, the.length)) end
 
 -- ## Config 
 the= {p= 2,
        k =1, m=2, -- Bayes control
       data= "../../moot/optimize/misc/auto93.csv",
       rseed= 1234567891,
-      Trainings=0.33, budget=4, Budget=25,-- active learning control
-      samples= 32}
+      budget=4, Budget=24,-- active learning control
+      acquire="xplore", Trainings=0.33, -- active learning control
+      samples= 32,
+      far = 0.8, leaf=2 }
 
 local Big=1E32
 
+go["-a"]= function(s) the.acquire = s end
 go["-b"]= function(s) the.budget = s+0 end
 go["-B"]= function(s) the.Budget = s+0 end
 go["-d"]= function(s) the.data = s end
+go["-f"]= function(s) the.far = s+0 end
 go["-k"]= function(s) the.k = s+0 end
+go["-l"]= function(s) the.l = s+0 end
 go["-m"]= function(s) the.m = s+0 end
 go["-p"]= function(s) the.p = s+0 end
 go["-r"]= function(s) the.rseed = s+0; math.randomseed(the.rseed) end
@@ -222,7 +230,6 @@ function Cols:initialize(ss)--> Cols, col names in `ss` turned to Nums or Syms
 function Sample:new(s)--> Sample. Like Num, but also keeps all the nums.
   return new(Sample,{txt=s, n=0, mu=0, m2=0, sd=0, lo=Big, hi=-Big, all={}}) end
 
-
 --------------------------------------------------------------------------------
 --  | |  ._    _|   _.  _|_   _  
 --  |_|  |_)  (_|  (_|   |_  (/_ 
@@ -303,6 +310,30 @@ function Data:around(k,  rows,      z)--> rows
       if r <= 0 then push(z, x.row); break end end end
   return z end
 
+function DATA:twoFar(repeats,rows,sortp,above,    most,a0,b0,a,b,d) --> row,row
+  most = 0
+  for i=1,repeats do 
+    a0,b0 = above or any(rows), any(rows)
+    d = self:xdist(a0,b0)
+    if d > most then most,a,b = d,a0,b0 end end
+  if sortp and self:ydist(b) < self:ydist(a) then a,b = b,a end
+  return most,a,b end
+
+function DATA:half(rows, sortp,above) --> float,rows,rows,row,row
+  local lefts,rights,left,right,cos,fun = {},{}
+  c, left,right = self:twoFar(the.far, rows, sortp, above)
+  cos = function(a,b) return (a^2 + c^2 - b^2) / (2*c+ 1E-32) end 
+  fun = function(r) return {d   = cos(self:xdist(r,left), self:xdist(r,right)),
+                            row = r} end
+  for i,one in pairs(sort(map(rows, fun), lt"d")) do
+    push(i <= #rows//2 and lefts or rights, one.row) end
+  return lefts, left, rights,rights, self.xdist(left,rights[1]) end
+
+function DATA:branch(rows, length,  above,      lefts,left) --> rows
+  if  length < 1 or #rows < 2 then return rows end 
+  lefts, left  = self:half(rows,true, above)
+  return self:branch(lefts, length - 1, left) end
+
 -------------------------------------------------------------------------------
 --   _                    
 --  |_)   _.       _    _ 
@@ -310,7 +341,7 @@ function Data:around(k,  rows,      z)--> rows
 --            /           
 
 function Sym:like(x,nPrior)--> n. How much this `Sym` likes this `n`. [6]
-  return  ((self.has[x] or 0) + the.m*nPrior) / (self.n + the.m)  end
+  return ((self.has[x] or 0) + the.m*nPrior) / (self.n + the.m)  end
 
 function Num:like(x,_,      v,tmp)--> n. How much this `Num` likes this `n`.
   v = self.sd^2 + 1/Big
@@ -324,6 +355,13 @@ function Data:loglike(row, nall, nh)--> n. How much does Data likes row?
   l     = function(n) return n>0 and math.log(n) or 0 end
   return l(prior) + sum(self.cols.x, f) end
 
+local acq= {}
+
+acq=
+{xplore= function(b,r,_) return math.abs(b+r)/(b + r + 1/Big) end
+,xploit= function(b,r,_) return b/(r + 1/Big) end
+,adapt = function(b,r,p) return math.abs(b+r*(1-p))/(b*(1-p) + r + 1/Big) end}
+
 -- 1. Sort a few labelled few examples. 
 -- 2. split them  into best and rest.
 -- 3. Use that split to  build a two-class classifier. 
@@ -336,23 +374,24 @@ function Data:loglike(row, nall, nh)--> n. How much does Data likes row?
 function Data:acquire()
   local Y,B,R,BR,test,train,todo,done,best,rest,n,_
   Y  = function(r) return self:ydist(r) end
-  B  = function(r) return best:loglike(r, #done, 2) end
-  R  = function(r) return rest:loglike(r, #done, 2) end
-  BR = function(r) return B(r) - R(r) end
+  B  = function(r) return math.exp(best:loglike(r, #done, 2)) end
+  R  = function(r) return math.exp(rest:loglike(r, #done, 2)) end
+  BR = function(r) return acq[the.acquire](B(r),R(r),#done/the.Budget) end
   n  = math.min(500, the.Trainings * #self.rows)
   train,test = split(shuffle(self.rows), n)
   test, _    = split(test, math.min(500,#test))
-  done,todo  = split(train, the.budget)            --- [1]
+  done,todo  = split(train, the.budget)            --- 1.
   while true do
     done = keysort(done,Y)
-    if #done > the.Budget - 4 or #todo < 5 then break end --- [6]
-    best,rest = split(done, math.sqrt(#done))          --- [2]
-    best, rest = self:clone(best), self:clone(rest)  --- [3]
-    todo = keysort(todo,BR)                       --- [4]
-    for _=1,2 do                                    --- [5]
+    if #done > the.Budget - 4 or #todo < 5 then break end --- 6.
+    best,rest = split(done, math.sqrt(#done))          --- 2.
+    best, rest = self:clone(best), self:clone(rest)    --- 3.
+    todo = keysort(todo,BR)                            --- 4.
+    for _=1,2 do                                       --- 5.
       push(done, table.remove(todo)); 
       push(done, table.remove(todo,1)) end end
-  return done, test, BR end     --- [7]
+  return done, test, BR end     --- 7.
+
 --------------------------------------------------------------------------------
 --   __                    
 --  (_   _|_   _.  _|_   _ 
@@ -484,6 +523,12 @@ go["--ys"] = function(file,    data,Y,YY)
   YY= function(a,b) return Y(a) < Y(b) end
   for k,row in pairs(sort(data.rows,YY)) do
     if k==1 or k% 30==0 then print(o(row), Y(row)) end end end
+
+go["--bayes"] = function(file,     data,like)
+  data= Data:new(csv(file or the.data))
+  like = function(row) return data:loglike(row,1000,2)  end
+  for i=1,200 do
+    print(fmt("%.2f",like(any(data.rows)))) end end
 
 go["--around"] = function(file,     data,Y)
   data= Data:new(csv(file or the.data))
