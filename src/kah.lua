@@ -20,7 +20,7 @@ OPTIONS:
   -b int    initial evaulation budget (default: %s)
   -B int    max evaulation budget (default: %s)
   -T float  ratio of training data (default: %s)
-  -f far    how far to lok for distant points (default: %s)
+  -f float  how far to lok for distant points (default: %s)
   -l int    max length of branches (default: %s)
 
 DEMO:
@@ -35,13 +35,13 @@ DEMO:
 
 -- ## Config 
 the= {p= 2,
-       k =1, m=2, -- Bayes control
+      k =1, m=2, -- Bayes control
       data= "../../moot/optimize/misc/auto93.csv",
       rseed= 1234567891,
       budget=4, Budget=24,-- active learning control
       acquire="xplore", Trainings=0.33, -- active learning control
       samples= 32,
-      far = 0.8, leaf=2 }
+      far = 0.9, leaf=2 }
 
 local Big=1E32
 
@@ -293,6 +293,10 @@ function Data:ydist(row,    d,f)--> n. Distance of y cols to utopia points.
   for _,col in pairs(self.cols.y) do d = d + math.abs(f(col)) ^ the.p end
   return (d/#self.cols.y) ^ (1/the.p) end
 
+function Data:neighbors(row1,rows,  f)--> a (rows, sorted by distance to row1)
+  f = function(row2) return self:xdist(row1,row2) end
+  return keysort(rows or self.rows, f) end
+
 -- kmeans++ initialization. Find  centroids are distance^2 from existing ones.
 function Data:around(k,  rows,      z)--> rows
   rows = rows or self.rows
@@ -310,27 +314,26 @@ function Data:around(k,  rows,      z)--> rows
       if r <= 0 then push(z, x.row); break end end end
   return z end
 
-function DATA:twoFar(repeats,rows,sortp,above,    most,a0,b0,a,b,d) --> row,row
-  most = 0
-  for i=1,repeats do 
-    a0,b0 = above or any(rows), any(rows)
-    d = self:xdist(a0,b0)
-    if d > most then most,a,b = d,a0,b0 end end
+function Data:twoFar(repeats,rows,sortp,above,    a,b,far) --> n,row,row
+  far = (the.far * #rows)//1
+  a =  above or self:neighbors(any(rows), rows)[far]
+  b =           self:neighbors(a,         rows)[far]
   if sortp and self:ydist(b) < self:ydist(a) then a,b = b,a end
-  return most,a,b end
+  return self:xdist(a,b),a,b end
 
-function DATA:half(rows, sortp,above) --> float,rows,rows,row,row
-  local lefts,rights,left,right,cos,fun = {},{}
-  c, left,right = self:twoFar(the.far, rows, sortp, above)
+function Data:half(rows, sortp,above) --> float,rows,rows,row,row
+  local lefts,rights = {},{}
+  local left,right,cos,fun
+  c, left, right = self:twoFar(the.far, rows, sortp, above)
   cos = function(a,b) return (a^2 + c^2 - b^2) / (2*c+ 1E-32) end 
   fun = function(r) return {d   = cos(self:xdist(r,left), self:xdist(r,right)),
                             row = r} end
   for i,one in pairs(sort(map(rows, fun), lt"d")) do
     push(i <= #rows//2 and lefts or rights, one.row) end
-  return lefts, left, rights,rights, self.xdist(left,rights[1]) end
+  return lefts, left, rights,rights, self:xdist(left,rights[1]) end
 
-function DATA:branch(rows, length,  above,      lefts,left) --> rows
-  if  length < 1 or #rows < 2 then return rows end 
+function Data:branch(rows, length,  above,      lefts,left) --> rows
+  if length < 1 or #rows < 2 then return rows end 
   lefts, left  = self:half(rows,true, above)
   return self:branch(lefts, length - 1, left) end
 
@@ -536,6 +539,13 @@ go["--around"] = function(file,     data,Y)
   for _=1,20 do
     shuffle(data.rows)
     print(Y(sort(data:around(20),two(Y))[1])) end end
+
+go["--branch"] = function(file,    data,Y)
+  data= Data:new(csv(file or the.data))
+  Y = function(row) return data:ydist(row) end
+  for _=1,20 do
+    shuffle(data.rows)
+    print(Y(keysort(data:branch(data.rows,20),Y)[1])) end end
 
 go["--stats1"] =function(_,s,r)
   r=5
