@@ -1,3 +1,23 @@
+
+how mahrd can it be to do multi object optimizatipn
+- competing
+    - lots of nuaces
+
+- holland vs chen mutation
+
+        Scientific Amer...
+Vol. 267, No. 1...
+Cover of Scientific American
+Vol. 267, No. 1, JULY 1992
+Scientific American
+Published by: Scientific American, a division of Nature America, Inc.
+https://www.jstor.org/stable/e24939119
+
+https://royalsociety.org/-/media/policy/projects/science-in-the-age-of-ai/science-in-the-age-of-ai-report.pdf
+-- small data
+-- reprodcuability (used to demain report priot experiemtns. now we read the values
+   in papers written by the authrors.
+
 Ever worry that our AI systems are 
 
 tdd: always leave one bug for tomorrow, so you can swapa in faster

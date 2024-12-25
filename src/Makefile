@@ -69,4 +69,8 @@ heading:
 compare: ../../moot/optimize/[chmp]*/*.csv
 	$(foreach f, $^, (lua kseed.lua -compare $f &); )
 
+branch: ../../moot/optimize/[chmp]*/*.csv
+	$(foreach f, $^, (lua kah.lua --branch $f | sort -rn | fmt -100  &) ; )
 
+branches:
+	$(MAKE) branch | tee ~/tmp/branches.out

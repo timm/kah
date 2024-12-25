@@ -17,8 +17,8 @@ OPTIONS:
   -p int    coefficient of distance (default: %s)
   -r int    random number seed  (default: %s)
   -s int    #samples searched for each new centroid (default: %s)
-  -b int    initial evaulation budget (default: %s)
-  -B int    max evaulation budget (default: %s)
+  -b int    initial evaluation budget (default: %s)
+  -B int    max evaluation budget (default: %s)
   -T float  ratio of training data (default: %s)
   -f float  how far to lok for distant points (default: %s)
   -l int    max length of branches (default: %s)
@@ -41,22 +41,22 @@ the= {p= 2,
       budget=4, Budget=24,-- active learning control
       acquire="xplore", Trainings=0.33, -- active learning control
       samples= 32,
-      far = 0.9, leaf=2 }
+      far = 0.9, length=10 }
 
 local Big=1E32
 
-go["-a"]= function(s) the.acquire = s end
-go["-b"]= function(s) the.budget = s+0 end
-go["-B"]= function(s) the.Budget = s+0 end
-go["-d"]= function(s) the.data = s end
-go["-f"]= function(s) the.far = s+0 end
-go["-k"]= function(s) the.k = s+0 end
-go["-l"]= function(s) the.l = s+0 end
-go["-m"]= function(s) the.m = s+0 end
-go["-p"]= function(s) the.p = s+0 end
-go["-r"]= function(s) the.rseed = s+0; math.randomseed(the.rseed) end
-go["-s"]= function(s) the.samples = s+0 end
-go["-T"]= function(s) the.Trainings = s+0 end
+go["-a"] = function(s) the.acquire = s end
+go["-b"] = function(s) the.budget = s+0 end
+go["-B"] = function(s) the.Budget = s+0 end
+go["-d"] = function(s) the.data = s end
+go["-f"] = function(s) the.far = s+0 end
+go["-k"] = function(s) the.k = s+0 end
+go["-l"] = function(s) the.length = s+0 end
+go["-m"] = function(s) the.m = s+0 end
+go["-p"] = function(s) the.p = s+0 end
+go["-r"] = function(s) the.rseed = s+0; math.randomseed(the.rseed) end
+go["-s"] = function(s) the.samples = s+0 end
+go["-T"] = function(s) the.Trainings = s+0 end
 
 -- -----------------------------------------------------------------------------
 -- ## Code Conventions
@@ -86,14 +86,14 @@ go["-T"]= function(s) the.Trainings = s+0 end
 -- [5] https://journals.sagepub.com/doi/pdf/10.3102/10769986025002101,table1
 -- [6] p4 of Yang, Ying, and Geoffrey I. Webb. "A comparative study of 
 --     discretization methods for naive-bayes classifiers." PKAW'02. 
-
+-- [7] https://doi.org/10.1145/568271.223812, p 169
 -------------------------------------------------------------------------------
 --             
 --  |   o  |_  
 --  |_  |  |_) 
 
 -- ### Lists
-function push(a,x)--> x,  added to end of `a`.
+local function push(a,x)--> x,  added to end of `a`.
   a[1+#a] =x; return x end
 
 local function any(a)--> x (any items of `a`)
@@ -170,7 +170,7 @@ local function o(x,          t,LIST,DICT)--> s. Generate a string for `x`.
   return "{" .. table.concat(t, " ") .. "}" end
 
 -- ### Polymorphism
-function new(methods, a)--a, attached to a delegation table of `methods`.
+local function new(methods, a)--a, attached to a delegation table of `methods`.
   methods.__index = methods
   methods.__tostring = methods.__tostring or o
   return setmetatable(a,methods) end
@@ -255,7 +255,7 @@ function Num:add(n)--> n. Updates Num using Welford's algorithm [3].
   self.hi = math.max(n, self.hi)
   return n end
 
-function Data:add(a)--> Data,  updated with one row.
+function Data:add(a)--> Data,  updated with one row.  
   for _,col in pairs(self.cols.all) do a[col.pos] = col:add(a[col.pos]) end 
   push(self.rows, a)
   return self end
@@ -298,10 +298,10 @@ function Data:neighbors(row1,rows,  f)--> a (rows, sorted by distance to row1)
   return keysort(rows or self.rows, f) end
 
 -- kmeans++ initialization. Find  centroids are distance^2 from existing ones.
-function Data:around(k,  rows,      z)--> rows
+function Data:around(budget,  rows,      z)--> rows
   rows = rows or self.rows
   z = {any(rows)}
-  for _ = 2,k do 
+  for _ = 2,budget do 
     local all,u = 0,{}
     for _ = 1,math.min(the.samples, #rows) do
       local row = any(rows)
@@ -321,21 +321,23 @@ function Data:twoFar(repeats,rows,sortp,above,    a,b,far) --> n,row,row
   if sortp and self:ydist(b) < self:ydist(a) then a,b = b,a end
   return self:xdist(a,b),a,b end
 
-function Data:half(rows, sortp,above) --> float,rows,rows,row,row
-  local lefts,rights = {},{}
-  local left,right,cos,fun
-  c, left, right = self:twoFar(the.far, rows, sortp, above)
-  cos = function(a,b) return (a^2 + c^2 - b^2) / (2*c+ 1E-32) end 
-  fun = function(r) return {d   = cos(self:xdist(r,left), self:xdist(r,right)),
-                            row = r} end
-  for i,one in pairs(sort(map(rows, fun), lt"d")) do
+function Data:half(rows, sortp,above) --> rows,rows,rows,row,m [7]
+  local lefts,rights = {},{} 
+  local c, left, right = self:twoFar(the.far, rows, sortp, above)
+  local cos = function(a,b) return (a^2 + c^2 - b^2) / (2*c+ 1E-32) end 
+  local f = function(r) 
+               return {d   = cos(self:xdist(r,left), self:xdist(r,right)),
+                       row = r} end
+  for i,one in pairs(sort(map(rows, f), lt"d")) do
     push(i <= #rows//2 and lefts or rights, one.row) end
   return lefts, left, rights,rights, self:xdist(left,rights[1]) end
 
-function Data:branch(rows, length,  above,      lefts,left) --> rows
-  if length < 1 or #rows < 2 then return rows end 
+function Data:branch(budget,  rows, above,      lefts,left) --> rows
+  rows = rows or self.rows
+  budget= budget or self.budget
+  if budget < 1 or #rows < 2 then return rows end 
   lefts, left  = self:half(rows,true, above)
-  return self:branch(lefts, length - 1, left) end
+  return self:branch(budget - 1, lefts, left) end
 
 -------------------------------------------------------------------------------
 --   _                    
@@ -361,9 +363,9 @@ function Data:loglike(row, nall, nh)--> n. How much does Data likes row?
 local acq= {}
 
 acq=
-{xplore= function(b,r,_) return math.abs(b+r)/(b + r + 1/Big) end
-,xploit= function(b,r,_) return b/(r + 1/Big) end
-,adapt = function(b,r,p) return math.abs(b+r*(1-p))/(b*(1-p) + r + 1/Big) end}
+{xplore = function(b,r,_) return math.abs(b+r)/(b + r + 1/Big) end
+,xploit = function(b,r,_) return b/(r + 1/Big) end
+,adapt  = function(b,r,p) return math.abs(b+r*(1-p))/(b*(1-p) + r + 1/Big) end}
 
 -- 1. Sort a few labelled few examples. 
 -- 2. split them  into best and rest.
@@ -374,7 +376,8 @@ acq=
 -- 6. If can you label more items, then go to 2. Else...
 -- 7. ... use the classifier to sort the remaining
 --    unlabelled examples. Report the best in that test set.
-function Data:acquire()
+function Data:acquire(budget)
+  budget = budget or the.budget
   local Y,B,R,BR,test,train,todo,done,best,rest,n,_
   Y  = function(r) return self:ydist(r) end
   B  = function(r) return math.exp(best:loglike(r, #done, 2)) end
@@ -435,7 +438,10 @@ function Sample:add(n,    d)--> n. Update a Sample with `n`.
   self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^.5  
   self.lo = math.min(n, self.lo)
   self.hi = math.max(n, self.hi)
-  return push(self.all, n) end
+  return push(self.all, n) end  
+
+function Sample:normalize(x)
+  return (x - self.lo)/(self.hi - self.lo +1 /Big) end
 
 function Sample.delta(i,j)--> n. Report mean difference, normalized by sd.
   return math.abs(i.mu - j.mu) / ((1E-32 + i.sd^2/i.n + j.sd^2/j.n)^.5) end
@@ -540,13 +546,6 @@ go["--around"] = function(file,     data,Y)
     shuffle(data.rows)
     print(Y(sort(data:around(20),two(Y))[1])) end end
 
-go["--branch"] = function(file,    data,Y)
-  data= Data:new(csv(file or the.data))
-  Y = function(row) return data:ydist(row) end
-  for _=1,20 do
-    shuffle(data.rows)
-    print(Y(keysort(data:branch(data.rows,20),Y)[1])) end end
-
 go["--stats1"] =function(_,s,r)
   r=5
 	print("r",fmt("\tmu\t\tsd")) 
@@ -583,6 +582,71 @@ go["--compare"] = function(file,    data,Y,done)
   for i=1,20 do
     done = data:around(25) 
     print(Y(keysort(done,Y)[1])) end  end
+
+local function _asIs(file,      data,Y)
+  data= Data:new(csv(file or the.data))
+  Y = function(row) return data:ydist(row) end
+  return data, adds(map(data.rows,Y)), Y end
+
+go["--branch"] = function(file,    data,Y,b4,S)
+  data,b4,Y=_asIs(file)
+  S = function(x) print(fmt("%.0f",100*x))  end
+  print(fmt("%.0f",100*b4.mu))
+  for _=1,20 do
+    shuffle(data.rows)
+    S(Y(keysort(data:branch(20),Y)[1])) end end
+
+local function _report(a,todo,rx,file)
+  print(o(todo))
+  for _,k in pairs{todo} do
+    print("::",k)
+    push(a, fmt("%.0f %s",100*rx[k].mu, rx[k]._meta.rank)) end
+  push(a, file:gsub("^.*/",""))
+  print(table.concat(a,", ")) end
+
+go["--comparez"] = function(file)
+  local BUDGETS = {5,10,15,20} --25,30,35,40,80,160}
+  local Repeats = 50
+  local Epsilon = 0.35
+  file = file or the.file
+  local Data,B4,Y = _asIs(file)
+  local Rx,BRx = {},{}
+  KEEP = function(txt,budget,s) 
+           s = s or Sample:new()
+           s.txt = txt
+           s.budget = budget
+           print("::",budget)
+           BRx[budget]=s
+           return push(Rx,s) end
+  SORTER = function(a,b)
+             return a._meta.mu < b._meta.mu or
+                    (a._meta.mu == b._meta.mu and a.budget < b.budget) end
+  BEST   = function(a) return Y(keysort(a,Y)[1]) end 
+  N      = function(x) return fmt("%.0f",100*x) end
+  TODO  = {
+  --  XPLOIT = function(budget) the.acq= "xploit";return data:acquire(budget) end,
+  --  XPLORE = function(budget) the.acq= "xplore";return data:acquire(budget) end,
+  --  ADAPT  = function(budget) the.acq= "adapt" ;return data:acquire(budget) end,
+  --  SWAY   = function(budget) return data:branch(budget-1) end,
+  --  RAND   = function(budget) sort(slice(shuffle(data.rows),budget),Y) end,
+    KPP    = function(budget) return Data:around(budget) end
+  }
+  KEEP("b4",#Data.rows, B4)
+  for what,how in pairs(TODO) do
+    for _,budget in pairs(BUDGETS) do
+      io.stderr:write(budget)
+      shuffle(Data.rows)
+      local tmp=KEEP(what,budget)
+      for _=1,Repeats do
+        tmp:add(BEST(how(budget))) end end end
+  Rx= sort(Sample.merges(sort(Rx,lt"mu"),B4.sd * Epsilon),SORTER)
+  _report({N(B4.mu - (Rx[1]._meta.mu) /(B4.mu - B4.lo)),
+           #Data.rows,
+           #Data.cols.x,
+           #Data.cols.y,
+           fmt("%.2f",B4.mu),
+           fmt("%.2f",B4.lo)},
+           BUDGETS,  BRx,file) end
 
 go["--compares"] = function(file)
   local SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,want,rand,u,report
