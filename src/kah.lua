@@ -628,7 +628,7 @@ go["--comparez"] = function(file)
   --  XPLORE = function(budget) the.acq= "xplore";return data:acquire(budget) end,
   --  ADAPT  = function(budget) the.acq= "adapt" ;return data:acquire(budget) end,
   --  SWAY   = function(budget) return data:branch(budget-1) end,
-  --  RAND   = function(budget) sort(slice(shuffle(data.rows),budget),Y) end,
+  --  RAND   = function(budget) return sort(slice(shuffle(data.rows),budget),Y) end,
     KPP    = function(budget) return Data:around(budget) end
   }
   KEEP("b4",#Data.rows, B4)
