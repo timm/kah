@@ -613,7 +613,8 @@ local function _report(a,todo,rx,file)
   print(table.concat(a,", ")) end
 
 go["--comparez"] = function(file)
-  local BUDGETS = {5,10,15,20,25,30,35,40,80,160}
+  --local BUDGETS = {5,10,15,20,25,30,35,40,80,160}
+  local BUDGETS = {20}
   local Repeats = 50
   local Epsilon = 0.35
   file = file or the.data
@@ -631,11 +632,11 @@ go["--comparez"] = function(file)
   BEST   = function(a) return Y(keysort(a,Y)[1]) end 
   N      = function(x) return fmt("%.0f",100*x) end
   TODO  = {
-  --  XPLOIT = function(budget) the.acq= "xploit";return data:acquire(budget) end,
-  --  XPLORE = function(budget) the.acq= "xplore";return data:acquire(budget) end,
-  --  ADAPT  = function(budget) the.acq= "adapt" ;return data:acquire(budget) end,
-  --  SWAY   = function(budget) return data:branch(budget-1) end,
-  --  RAND   = function(budget) return sort(slice(shuffle(data.rows),budget),Y) end,
+    XPLOIT = function(budget) the.acq= "xploit";return Data:acquire(budget) end,
+    XPLORE = function(budget) the.acq= "xplore";return Data:acquire(budget) end,
+    ADAPT  = function(budget) the.acq= "adapt" ;return Data:acquire(budget) end,
+    SWAY   = function(budget) return Data:branch(budget-1) end,
+    RAND   = function(budget) return sort(split(shuffle(Data.rows),budget),Y) end,
     KPP    = function(budget) return Data:around(budget) end
   }
   KEEP("b4",#Data.rows, B4)
