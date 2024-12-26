@@ -97,7 +97,9 @@ local function push(a,x)--> x,  added to end of `a`.
   a[1+#a] =x; return x end
 
 local function any(a)--> x (any items of `a`)
-  return a[math.random(#a)] end
+  local tmp = a[math.random(#a)] 
+  assert(tmp ~= nil,"nil selected")
+  return tmp end
 
 local function many(a,n,   z)--> a (`n` random items from `a`).
   z={}; for i = 1,(n or #a) do z[i]=any(a) end; return z end
@@ -116,12 +118,13 @@ local function sum(a,f,     n)--> a. Return sum of items in `a` filtered by `f`.
 local function map(a,f,     z)--> a. Return items in `a` filtered through `f`.
   z={}; for _,x in pairs(a) do z[1+#z]=f(x) end ; return z end
 
-local function min(a,f,      n,lo,z)--> x (item in `a` that scores least on `f`).
+local function min(a,f,      any,n,lo,z)--> x (item in `a` that scores least on `f`).
   lo = math.huge
   for _,x in pairs(a) do
+    any = any or x
     n = f(x)
     if n < lo then lo,z = n,x end end
-  return z end
+  return z or any end
 
 local function find(a,f)
   for _,x in pairs(a) do if f(x) then return x end end end
@@ -304,17 +307,20 @@ function Data:neighbors(row1,rows,  f)--> a (rows, sorted by distance to row1)
 function Data:around(budget,  rows,      z)--> rows
   rows = rows or self.rows
   z = {any(rows)}
-  for _ = 2,budget do 
+  for k = 2,budget do 
     local all,u = 0,{}
     for _ = 1,math.min(the.samples, #rows) do
       local row = any(rows)
       local closest = min(z, function(maybe) return self:xdist(row,maybe) end) 
-      if row and closest then
-         all = all + push(u,{row=row, d=self:xdist(row,closest)^2}).d end end
+      all = all + push(u,{row=row, d=self:xdist(row,closest)^2}).d end 
     local r = all * math.random()
+    local one
     for _,x in pairs(u) do
+      one = x.row
       r = r - x.d
-      if r <= 0 then push(z, x.row); break end end end
+      if r <= 0 then break end end 
+    push(z, one)
+  end
   return z end
 
 function Data:twoFar(repeats,rows,sortp,above,    a,b,far) --> n,row,row
@@ -602,7 +608,7 @@ go["--branch"] = function(file,    data,Y,b4,S)
 local function _report(a,todo,rx,file)
   for _,k in pairs(todo) do
      one = find(rx, function(two) return two.budget == k end)
-    push(a, fmt("%.0f %s",100*one.mu, one._meta.rank)) end
+     if one then push(a, fmt("%.0f %s",100*one.mu, one._meta.rank)) end end
   push(a, file:gsub("^.*/",""))
   print(table.concat(a,", ")) end
 
@@ -642,6 +648,7 @@ go["--comparez"] = function(file)
         tmp:add(BEST(how(budget))) end end end
   print(" ")
   Rx1=Sample.merges(sort(Rx,lt"mu"),B4.sd * Epsilon)
+  table.insert(BUDGETS,1,#Data.rows)
   print("D,   #R,#X,#Y, B4.mu, B4.lo,2B.mu",table.concat(BUDGETS,",   "), ",File")
   _report({N((B4.mu - Rx1[1]._meta.mu) /(B4.mu - B4.lo)),
            #Data.rows,
@@ -652,6 +659,12 @@ go["--comparez"] = function(file)
            fmt("%.0f",100*Rx1[1]._meta.mu)},
            BUDGETS,  Rx,file) 
   end
+
+go["--xomo"] = function(file)
+  local Data,B4,Y = _asIs(file or the.data)
+  print(B4.mu, B4.lo)
+  print(#Data:around(30))
+  for _,row in pairs(Data:around(30)) do print(Y(row)) end end
 
 go["--compares"] = function(file)
   local SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,want,rand,u,report
