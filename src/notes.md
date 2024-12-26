@@ -1,3 +1,27 @@
+why not found?
+
+- poor emirical track record (deep learning paper)
+- not enough data to explore (now we have moot)
+- all too  willing to accept methods from AI without reviewing them critically
+- no one thought to check and exploit what is unique about se artifacts (follow the leader, 
+
+why did it work?
+
+<!-- What you're describing sounds like preferential attachment or the rich-get-richer effect, which is closely related to power law distributions and exponential growth dynamics. This mechanism often shows up in networks, social systems, and exploratory algorithms. -->
+<!--  -->
+<!-- In essence: -->
+<!--  -->
+<!-- Few nodes get most of the attention (or connections). -->
+<!-- The more explored/connected something is, the more likely it is to attract even more exploration/connection. -->
+<!-- This isn't quite Zipf's Law (which deals with rank-frequency distributions) but aligns with concepts like: -->
+<!--  -->
+<!-- Yule Process (from biology/ecology). -->
+<!-- Barabási–Albert Model (scale-free networks). -->
+<!-- Matthew Effect ("the rich get richer"). -->
+<!-- In algorithms or exploratory systems, this can lead to positive feedback loops where "popular" choices dominate over time, reinforcing their selection. -->
+<!--  -->
+<!-- Would this concept fit the pattern you're observing? -->
+
 
 how mahrd can it be to do multi object optimizatipn
 - competing
