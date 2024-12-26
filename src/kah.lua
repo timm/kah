@@ -123,6 +123,9 @@ local function min(a,f,      n,lo,z)--> x (item in `a` that scores least on `f`)
     if n < lo then lo,z = n,x end end
   return z end
 
+local function find(a,f)
+  for _,x in pairs(a) do if f(x) then return x end end end
+
 -- ### Sort
 local function two(f)--> f, sorted by `f(x) < f(y)`.
   return function(p,q) return f(p) < f(q) end end
@@ -597,26 +600,24 @@ go["--branch"] = function(file,    data,Y,b4,S)
     S(Y(keysort(data:branch(20),Y)[1])) end end
 
 local function _report(a,todo,rx,file)
-  print(o(todo))
-  for _,k in pairs{todo} do
-    print("::",k)
-    push(a, fmt("%.0f %s",100*rx[k].mu, rx[k]._meta.rank)) end
+  for _,k in pairs(todo) do
+     one = find(rx, function(two) return two.budget == k end)
+    push(a, fmt("%.0f %s",100*one.mu, one._meta.rank)) end
   push(a, file:gsub("^.*/",""))
   print(table.concat(a,", ")) end
 
 go["--comparez"] = function(file)
-  local BUDGETS = {5,10,15,20} --25,30,35,40,80,160}
+  local BUDGETS = {5,10,15,20,25,30,35,40,80,160}
   local Repeats = 50
   local Epsilon = 0.35
-  file = file or the.file
+  file = file or the.data
   local Data,B4,Y = _asIs(file)
-  local Rx,BRx = {},{}
+  local Rx = {}
+  local KEEP,SORTER,BEST,N,TODO,Rx1
   KEEP = function(txt,budget,s) 
            s = s or Sample:new()
            s.txt = txt
            s.budget = budget
-           print("::",budget)
-           BRx[budget]=s
            return push(Rx,s) end
   SORTER = function(a,b)
              return a._meta.mu < b._meta.mu or
@@ -634,19 +635,23 @@ go["--comparez"] = function(file)
   KEEP("b4",#Data.rows, B4)
   for what,how in pairs(TODO) do
     for _,budget in pairs(BUDGETS) do
-      io.stderr:write(budget)
+      io.stderr:write(".")
       shuffle(Data.rows)
       local tmp=KEEP(what,budget)
       for _=1,Repeats do
         tmp:add(BEST(how(budget))) end end end
-  Rx= sort(Sample.merges(sort(Rx,lt"mu"),B4.sd * Epsilon),SORTER)
-  _report({N(B4.mu - (Rx[1]._meta.mu) /(B4.mu - B4.lo)),
+  print(" ")
+  Rx1=Sample.merges(sort(Rx,lt"mu"),B4.sd * Epsilon)
+  print("D,   #R,#X,#Y, B4.mu, B4.lo,2B.mu",table.concat(BUDGETS,",   "), ",File")
+  _report({N((B4.mu - Rx1[1]._meta.mu) /(B4.mu - B4.lo)),
            #Data.rows,
            #Data.cols.x,
            #Data.cols.y,
-           fmt("%.2f",B4.mu),
-           fmt("%.2f",B4.lo)},
-           BUDGETS,  BRx,file) end
+           fmt("%.0f",100*B4.mu),
+           fmt("%.0f",100*B4.lo),
+           fmt("%.0f",100*Rx1[1]._meta.mu)},
+           BUDGETS,  Rx,file) 
+  end
 
 go["--compares"] = function(file)
   local SORTER,Y,X,G,G0,all,b4,copy,repeats,data,all,first,want,rand,u,report

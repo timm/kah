@@ -66,11 +66,14 @@ word: ## commit to main
 heading:
 	- echo -en "$(LOUD)Heading? $(SOFT)" ;  read x ; figlet -W -f mini $$x | gawk '{print "#  " $$0}'
 
-compare: ../../moot/optimize/[chmp]*/*.csv
-	$(foreach f, $^, (lua kseed.lua -compare $f &); )
+comparez: ../../moot/optimize/[chmp]*/*.csv
+	$(foreach f, $^, (lua kah.lua --comparez $f & ); )
 
 branch: ../../moot/optimize/[chmp]*/*.csv
 	$(foreach f, $^, (lua kah.lua --branch $f | sort -rn | fmt -100  &) ; )
 
-branches:
-	$(MAKE) branch | tee ~/tmp/branches.out
+branches:; $(MAKE) branch | tee ~/tmp/$@.out
+comparezs:; $(MAKE) comparez | tee ~/tmp/$@.out
+
+kill:
+		ps | grep lua | grep -v vi | gawk '{system("kill -9 " $$1)}'  
