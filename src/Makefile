@@ -75,5 +75,10 @@ branch: ../../moot/optimize/[chmp]*/*.csv
 branches:; $(MAKE) branch | tee ~/tmp/$@.out
 comparezs:; $(MAKE) comparez | tee ~/tmp/$@.out
 
+JustComparez: ../../moot/optimize/[chmp]*/*.csv
+	$(foreach f, $^, (lua kahkppSamplesOnly.lua --comparez $f & ); )
+
+JustComparezs:; $(MAKE) JustComparez | tee ~/tmp/$@.out
+
 kill:
 		ps | grep lua | grep -v vi | gawk '{system("kill -9 " $$1)}'  

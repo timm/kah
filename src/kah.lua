@@ -607,14 +607,15 @@ go["--branch"] = function(file,    data,Y,b4,S)
 
 local function _report(a,todo,rx,file)
   for _,k in pairs(todo) do
-     one = find(rx, function(two) return two.budget == k end)
-     if one then push(a, fmt("%.0f %s",100*one.mu, one._meta.rank)) end end
+     one = find(rx, function(two) return two.budget == k or two.txt == k end)
+     if not one then print("band", k) end
+     push(a, fmt("%.0f %s",100*one.mu, one._meta.rank)) end 
   push(a, file:gsub("^.*/",""))
-  print(table.concat(a,", ")) end
+  print(table.concat(a,", ")) end 
 
 go["--comparez"] = function(file)
   --local BUDGETS = {5,10,15,20,25,30,35,40,80,160}
-  local BUDGETS = {20}
+  local BUDGETS = {25}
   local Repeats = 50
   local Epsilon = 0.35
   file = file or the.data
@@ -624,19 +625,19 @@ go["--comparez"] = function(file)
   KEEP = function(txt,budget,s) 
            s = s or Sample:new()
            s.txt = txt
-           s.budget = budget
+           s.budget = budge
            return push(Rx,s) end
   SORTER = function(a,b)
              return a._meta.mu < b._meta.mu or
                     (a._meta.mu == b._meta.mu and a.budget < b.budget) end
-  BEST   = function(a) return Y(keysort(a,Y)[1]) end 
+  BEST   = function(a)  local k; k= Y(keysort(a,Y)[1]); return k end 
   N      = function(x) return fmt("%.0f",100*x) end
   TODO  = {
     XPLOIT = function(budget) the.acq= "xploit";return Data:acquire(budget) end,
     XPLORE = function(budget) the.acq= "xplore";return Data:acquire(budget) end,
     ADAPT  = function(budget) the.acq= "adapt" ;return Data:acquire(budget) end,
     SWAY   = function(budget) return Data:branch(budget-1) end,
-    RAND   = function(budget) return sort(split(shuffle(Data.rows),budget),Y) end,
+    RAND   = function(budget) return split(shuffle(Data.rows),budget) end,
     KPP    = function(budget) return Data:around(budget) end
   }
   KEEP("b4",#Data.rows, B4)
@@ -646,11 +647,17 @@ go["--comparez"] = function(file)
       shuffle(Data.rows)
       local tmp=KEEP(what,budget)
       for _=1,Repeats do
-        tmp:add(BEST(how(budget))) end end end
+        tmp:add(BEST(how(budget))) end 
+      end end
   print(" ")
   Rx1=Sample.merges(sort(Rx,lt"mu"),B4.sd * Epsilon)
-  table.insert(BUDGETS,1,#Data.rows)
-  print("D,   #R,#X,#Y, B4.mu, B4.lo,2B.mu",table.concat(BUDGETS,",   "), ",File")
+  local todo1={}
+  for s,_ in pairs(TODO) do
+       push(todo1,tostring(s)) end
+  todo1= sort(todo1)
+  print(o(todo1))
+  print("D,   #R,#X,#Y, B4.mu, B4.lo,2B.mu",table.concat(todo1,",   "), ",File")
+  print("D,   #R,#X,#Y, B4.mu, B4.lo,2B.mu",table.concat(todo1,",   "), ",File")
   _report({N((B4.mu - Rx1[1]._meta.mu) /(B4.mu - B4.lo)),
            #Data.rows,
            #Data.cols.x,
@@ -658,7 +665,7 @@ go["--comparez"] = function(file)
            fmt("%.0f",100*B4.mu),
            fmt("%.0f",100*B4.lo),
            fmt("%.0f",100*Rx1[1]._meta.mu)},
-           BUDGETS,  Rx,file) 
+           todo1,  Rx,file) 
   end
 
 go["--xomo"] = function(file)
