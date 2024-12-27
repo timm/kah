@@ -605,68 +605,56 @@ go["--branch"] = function(file,    data,Y,b4,S)
     shuffle(data.rows)
     S(Y(keysort(data:branch(20),Y)[1])) end end
 
-local function _report(a,todo,rx,file)
-  for _,k in pairs(todo) do
-     one = find(rx, function(two) return two.budget == k or two.txt == k end)
-     if not one then print("band", k) end
-     push(a, fmt("%.0f %s",100*one.mu, one._meta.rank)) end 
-  push(a, file:gsub("^.*/",""))
-  print(table.concat(a,", ")) end 
-
 go["--comparez"] = function(file)
-  --local BUDGETS = {5,10,15,20,25,30,35,40,80,160}
-  local BUDGETS = {25}
+  file = file or the.data
+  local Budget = 25
   local Repeats = 50
   local Epsilon = 0.35
-  file = file or the.data
-  local Data,B4,Y = _asIs(file)
-  local Rx = {}
-  local KEEP,SORTER,BEST,N,TODO,Rx1
-  KEEP = function(txt,budget,s) 
-           s = s or Sample:new()
-           s.txt = txt
-           s.budget = budge
-           return push(Rx,s) end
-  SORTER = function(a,b)
-             return a._meta.mu < b._meta.mu or
-                    (a._meta.mu == b._meta.mu and a.budget < b.budget) end
-  BEST   = function(a)  local k; k= Y(keysort(a,Y)[1]); return k end 
-  N      = function(x) return fmt("%.0f",100*x) end
-  TODO  = {
-    XPLOIT = function(budget) the.acq= "xploit";return Data:acquire(budget) end,
-    XPLORE = function(budget) the.acq= "xplore";return Data:acquire(budget) end,
-    ADAPT  = function(budget) the.acq= "adapt" ;return Data:acquire(budget) end,
-    SWAY   = function(budget) return Data:branch(budget-1) end,
-    RAND   = function(budget) return split(shuffle(Data.rows),budget) end,
-    KPP    = function(budget) return Data:around(budget) end
-  }
-  KEEP("b4",#Data.rows, B4)
-  for what,how in pairs(TODO) do
-    for _,budget in pairs(BUDGETS) do
+  local data= Data:new(csv(file or the.data))
+  local Y  = function(row) return data:ydist(row) end
+  local B4  =adds(map(data.rows,Y))
+  local BEST   = function(a)  return Y(keysort(a,Y)[1])  end 
+  local N      = function(x) return fmt("%.0f",100*x) end
+  local TASKS  = sort({
+    {"XPLOIT", function() the.acq= "xploit";return data:acquire(Budget) end},
+    {"XPLORE", function() the.acq= "xplore";return data:acquire(Budget) end},
+    {"ADAPT" , function() the.acq= "adapt" ;return data:acquire(Budget) end},
+    {"SWAY"  , function() return data:branch(Budget-1) end},
+    {"RAND"  , function() return split(shuffle(data.rows),Budget) end},
+    {"  5"   ,  function() return data:around(5) end},
+    {" 10"   ,  function() return data:around(10) end},
+    {" 15"   ,  function() return data:around(15) end},
+    {" 20"   ,  function() return data:around(20) end},
+    {" 25"   ,  function() return data:around(25) end},
+    {" 30"   ,  function() return data:around(30) end},
+    {" 35"   ,  function() return data:around(35) end},
+    {" 40"   ,  function() return data:around(40) end},
+    {" 80"   ,  function() return data:around(80) end},
+    {"160"   ,  function() return data:around(160) end}
+    },lt(1))
+  local rxs={}
+  for _,task in pairs(TASKS) do
       io.stderr:write(".")
-      shuffle(Data.rows)
-      local tmp=KEEP(what,budget)
+      push(rxs, push(task, Sample:new(task[1])))
       for _=1,Repeats do
-        tmp:add(BEST(how(budget))) end 
-      end end
+        shuffle(data.rows)
+        task[3]:add(BEST(task[2]())) end
+  end  
   print(" ")
-  Rx1=Sample.merges(sort(Rx,lt"mu"),B4.sd * Epsilon)
-  local todo1={}
-  for s,_ in pairs(TODO) do
-       push(todo1,tostring(s)) end
-  todo1= sort(todo1)
-  print(o(todo1))
-  print("D,   #R,#X,#Y, B4.mu, B4.lo,2B.mu",table.concat(todo1,",   "), ",File")
-  print("D,   #R,#X,#Y, B4.mu, B4.lo,2B.mu",table.concat(todo1,",   "), ",File")
-  _report({N((B4.mu - Rx1[1]._meta.mu) /(B4.mu - B4.lo)),
-           #Data.rows,
-           #Data.cols.x,
-           #Data.cols.y,
+  local sorted=Sample.merges(sort(rxs,lt"mu"),B4.sd * Epsilon)
+  local names = map(TASKS,function(task) return task[1] end)
+  print("D,#R,#X,#Y,B4.mu,B4.lo,2B.mu",table.concat(names,","),",File")
+  local report = {N((B4.mu - sorted[1]._meta.mu) /(B4.mu - B4.lo)),
+           #data.rows,
+           #data.cols.x,
+           #data.cols.y,
            fmt("%.0f",100*B4.mu),
            fmt("%.0f",100*B4.lo),
-           fmt("%.0f",100*Rx1[1]._meta.mu)},
-           todo1,  Rx,file) 
-  end
+           fmt("%.0f",100*sorted[1]._meta.mu)}
+  for _,task in pairs(TASKS) do
+     push(report, fmt("%.0f %s",100*task[3].mu, task[3]._meta.rank)) end 
+  push(report, file:gsub("^.*/",""))
+  print(table.concat(report,", ")) end 
 
 go["--xomo"] = function(file)
   local Data,B4,Y = _asIs(file or the.data)
