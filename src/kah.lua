@@ -615,7 +615,7 @@ go["--comparez"] = function(file)
   local B4  =adds(map(data.rows,Y))
   local BEST   = function(a)  return Y(keysort(a,Y)[1])  end 
   local N      = function(x) return fmt("%.0f",100*x) end
-  local TASKS  = sort({
+  local TASKS  = {
     {"XPLOIT", function() the.acq= "xploit";return data:acquire(Budget) end},
     {"XPLORE", function() the.acq= "xplore";return data:acquire(Budget) end},
     {"ADAPT" , function() the.acq= "adapt" ;return data:acquire(Budget) end},
@@ -631,7 +631,7 @@ go["--comparez"] = function(file)
     {" 40"   ,  function() return data:around(40) end},
     {" 80"   ,  function() return data:around(80) end},
     {"160"   ,  function() return data:around(160) end}
-    },lt(1))
+    }
   local rxs={}
   for _,task in pairs(TASKS) do
       io.stderr:write(".")
@@ -641,15 +641,18 @@ go["--comparez"] = function(file)
         task[3]:add(BEST(task[2]())) end
   end  
   print(" ")
+  push(rxs,B4)
+  push(TASKS, {"Before",true,B4})
   local sorted=Sample.merges(sort(rxs,lt"mu"),B4.sd * Epsilon)
   local names = map(TASKS,function(task) return task[1] end)
-  print("D,#R,#X,#Y,B4.mu,B4.lo,2B.mu",table.concat(names,","),",File")
+  print("D,#R,#X,#Y,B4.mu,B4.lo,B4.sd,2B.mu",table.concat(names,","),",File")
   local report = {N((B4.mu - sorted[1]._meta.mu) /(B4.mu - B4.lo)),
            #data.rows,
            #data.cols.x,
            #data.cols.y,
            fmt("%.0f",100*B4.mu),
            fmt("%.0f",100*B4.lo),
+           fmt("%.0f",100*B4.sd),
            fmt("%.0f",100*sorted[1]._meta.mu)}
   for _,task in pairs(TASKS) do
      push(report, fmt("%.0f %s",100*task[3].mu, task[3]._meta.rank)) end 
