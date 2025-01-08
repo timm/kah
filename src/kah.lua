@@ -372,9 +372,9 @@ function Data:loglike(row, nall, nh)--> n. How much does Data likes row?
 local acq= {}
 
 acq=
-{xplore = function(b,r,_) return math.abs(b-r)/(b + r + 1/Big) end
+{xplore = function(b,r,_) return math.abs(b+r)/(b - r + 1/Big) end
 ,xploit = function(b,r,_) return b/(r + 1/Big) end
-,adapt  = function(b,r,p) return math.abs(b-r*(1-p))/(b*(1-p) + r + 1/Big) end}
+,adapt  = function(b,r,p) return math.abs(b+r*(1-p))/(b*(1-p) - r + 1/Big) end}
 
 -- 1. Sort a few labelled few examples. 
 -- 2. split them  into best and rest.
