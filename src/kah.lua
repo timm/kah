@@ -372,9 +372,9 @@ function Data:loglike(row, nall, nh)--> n. How much does Data likes row?
 local acq= {}
 
 acq=
-{xplore = function(b,r,_) return math.abs(b+r)/(b - r + 1/Big) end
+{xplore = function(b,r,_) return (b+r)/math.abs(b - r + 1/Big) end
 ,xploit = function(b,r,_) return b/(r + 1/Big) end
-,adapt  = function(b,r,p) return math.abs(b+r*(1-p))/(b*(1-p) - r + 1/Big) end}
+,adapt  = function(b,r,p) q=1-p; return (b+r*q)/math.abs(b*q - r + 1/Big) end}
 
 -- 1. Sort a few labelled few examples. 
 -- 2. split them  into best and rest.
@@ -620,17 +620,13 @@ go["--comparez"] = function(file)
     {"XPLORE", function() the.acq= "xplore";return data:acquire(Budget) end},
     {"ADAPT" , function() the.acq= "adapt" ;return data:acquire(Budget) end},
     {"SWAY"  , function() return data:branch(Budget-1) end},
-    {"RAND"  , function() return split(shuffle(data.rows),Budget) end},
-    {"  5"   ,  function() return data:around(5) end},
-    {" 10"   ,  function() return data:around(10) end},
-    {" 15"   ,  function() return data:around(15) end},
-    {" 20"   ,  function() return data:around(20) end},
-    {" 25"   ,  function() return data:around(25) end},
-    {" 30"   ,  function() return data:around(30) end},
-    {" 35"   ,  function() return data:around(35) end},
-    {" 40"   ,  function() return data:around(40) end},
-    {" 80"   ,  function() return data:around(80) end},
-    {"160"   ,  function() return data:around(160) end}
+    {"  6"   , function() return data:around(6) end},
+    {" 12"   , function() return data:around(12) end},
+    {" 18"   , function() return data:around(18) end},
+    {" 24"   , function() return data:around(24) end},
+    {" 50"   , function() return data:around(50) end},
+    {"100"   , function() return data:around(100) end},
+    {"200"   , function() return data:around(200) end},
     }
   local rxs={}
   for _,task in pairs(TASKS) do

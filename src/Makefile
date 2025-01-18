@@ -75,5 +75,10 @@ branch: ../../moot/optimize/[chmp]*/*.csv
 branches:; $(MAKE) branch | tee ~/tmp/$@.out
 comparezs:; $(MAKE) comparez | tee ~/tmp/$@.out
 
+report:
+		echo "D,#R,#X,#Y,B4.mu,B4.lo,B4.sd,2B.mu,      XPLOIT,XPLORE,ADAPT,SWAY,  6, 12, 18, 24, 50,100,200,Before     ,File"
+		cat ~/tmp/comparezs.out | egrep csv
+
+
 kill:
 		ps | grep lua | grep -v vi | gawk '{system("kill -9 " $$1)}'  
