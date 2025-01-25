@@ -19,6 +19,8 @@ DEMOS:
 
 the = {bins = 7, 
        seed = 1234567891,
+       p    = 2,
+       samples = 32,
        file = "../../moot/optimize/misc/auto93.csv"}
 
 go["-b"] = function(s) the.bins = s + 0 end
@@ -31,7 +33,7 @@ local Row, Cols, Data, Sym, Num = {},{},{},{},{}
 
 -------- --------- --------- --------- --------- --------- --------- --------- -----------
 local abs, cos, log, sqrt = math.abs, math.cos, math.log, math.sqrt
-local any, csv, fmt, _id, id, many, map, minkoski
+local any, csv, fmt, _id, id, keysort, many, map, minkoski
 local new, normal, o, oo, push, puts, sort, sum
 
 function any(t) return t[math.random(#t)] end
@@ -49,10 +51,17 @@ fmt = string.format
 _id = 0
 function id() _id = _id+1; return _id end 
 
+function keysort(a, DO)
+  local DECORATE   = function(x) return {DO(x),x} end
+  local UNDECORATE = function(x) return x[2] end
+  return map(sort(map(a, DECORATE), lt(1)), UNDECORATE) end
+
+function lt(k) return function(a,b) return a[k] < b[k] end end
+
 function map(t,DO,     u)
   u={}; for _,x in pairs(t) do u[1+#u] = DO(x) end; return u end
 
-function minkowski(cols,p, FUN,  DO)
+function minkowski(cols, p, FUN,  DO)
   DO = function(col) return FUN(col) ^ p end
   return (sum(cols, DO) / #cols) ^ (1/p) end
 
@@ -108,7 +117,7 @@ function Num:new(s,n)
   return new(Num,{txt=s, pos=n or 0, n=0, lo=Big, hi= -Big, mu=0, m2=0, sd=0,
                   goal=(s or ""):find"-$" and 0 or 1}) end 
 
-function Data:clone(src) return Data:new({i.cols.names}):puts(src) end
+function Data:clone(src) return Data:new({Row:new(i.cols.names)}):puts(src) end
 
 function Cols:inits(names,    col)
   for n,s in pairs(names) do
@@ -131,7 +140,8 @@ function Data:puts(src)
 
 function Data:put(row)
   if   self.cols 
-  then push(self.rows, self.cols:put(row)) 
+  then self.cols:put(row) 
+       push(self.rows, row)
   else self.cols = Cols:new(row) end end
 
 function Cols:put(row,   PUT)
@@ -143,8 +153,7 @@ function Sym:put(x)
   self.n = self.n + 1
   self.has[x] = 1 + (self.has[x] or 0)
   if self.has[x] > self.most then
-    self.most, self.mode = self.has[x], x end 
-  return x end
+    self.most, self.mode = self.has[x], x end  end
 
 function Num:put(n,    delta)
   if n=="?" then return n end
@@ -155,16 +164,15 @@ function Num:put(n,    delta)
   self.m2 = self.m2 + delta*(n - self.mu)
   self.sd = self.n < 2 and 0 or (self.m2/(self.n - 1))^0.5
   self.lo = math.min(n, self.lo)
-  self.hi = math.max(n, self.hi)
-  return n end
+  self.hi = math.max(n, self.hi) end
 
 -------- --------- --------- --------- --------- --------- --------- --------- -----------
 function Data:sorted()
-  table.sort(self.rows, function(row) return self:ydist(row) end) 
+ self.rows = keysort(self.rows, function(row) return self:ydist(row) end) 
   return self.rows end
 
 function Data:ydist(row,     DO)
-  DO = function(c) oo(c); return abs(c.goal - c:norm(row:get(c))) end
+  DO = function(c) return abs(c.goal - c:norm(row:get(c))) end
   return minkowski(self.cols.y, the.p, DO) end
 
 function Data:xdist(row1,row2,    DO)
@@ -182,20 +190,18 @@ function Sym:dist(p,q)
   if p=="?" and q=="?" then return 1 end 
   return p==q and 0 or 1 end
 
-function Data:neighbors(row1,rows)
-  return sort(rows or i.rows, 
-              function(row2) 
-                if row1.id ~= row2.id then
-                  return self:xdist(row1,row2) end end) end
+  function Data:neighbors(row1,rows)
+    return keysort(rows or i.rows, function(row2) 
+                                    return self:xdist(row1,row2) end ) end
 
 function Data:centroids(k,  rows,      out)--> rows
   rows = rows or self.rows
   out = {any(rows)}
-  for _ = 2,budget do 
+  for _ = 2,k do 
     local all,u = 0,{}
     for _ = 1, the.samples do
       local row = any(rows)
-      local closest = self:neighbors(row, out)[1]
+      local closest = self:neighbors(row, out)[2]
       all = all + push(u, {row=row, d=self:xdist(row,closest)^2}).d end 
     local i,r = 1,all * math.random()
     for j,x in pairs(u) do
@@ -245,9 +251,23 @@ go["--header"] = function(_,   t)
 go["--data"] = function(_,   d)
   _cols(Data:new(the.file).cols) end
 
-go["--ydist"] = function(_,  n) 
+go["--xdist"] = function(_,  d) 
+  d= Data:new(the.file)
+  one = d.rows[1]
+  print("","   ",o(one.cells))
+  for n,row in pairs(keysort(d.rows, function(a) return d:xdist(one,a) end)) do
+     if n < 10 or n > #d.rows - 10 then 
+       print(n, fmt("%.3f",d:xdist(row,one)), o(row.cells)) end end end
+
+go["--ydist"] = function(_,  d) 
+  d= Data:new(the.file)
   for n,row in pairs(Data:new(the.file):sorted()) do 
-    if n % 50 == 0 then print(n, o(row)) end end end
+     if n < 10 or n > #d.rows - 10 then 
+       print(n, fmt("%.3f",d:ydist(row)), o(row.cells)) end end end
+
+go["--centroids"] = function(_,  d)
+  d= Data:new(the.file)
+  for _,row in pairs(d:centroids(24).rows) do oo(row.cells) end end
 
 -------- --------- --------- --------- --------- --------- --------- --------- -----------
 if not pcall(debug.getlocal,4,1) then  -- if this code is in charge
