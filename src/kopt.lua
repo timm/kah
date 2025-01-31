@@ -17,6 +17,21 @@ DEMOS:
   --csv
   --data ]]) end
 
+-- THe column names in row1 of the input csv files dindicates column meta data:
+--  
+-- - **`^[A-Z]`**: Columns that start with an uppercase letter are treated 
+--   as **numeric columns** (`Num`).
+-- - **`X$`**:  Columns that end with `X` are **ignored** (not added to 
+--   `self.x` or `self.y`).
+-- - **`!$`**: Columns that end with `!` are treated as the **class/target 
+--   column** (`self.klass`).
+-- - **`+$` or `-$`**: Columns that end with `+` or `-` are treated as 
+--   **dependent/target variables** and added to `self.y`. **`+`** goals are 
+--   to be maximized while
+--   **`-`** goals are to be minimized.
+-- - **Other names**:  Columns that do not match the above patterns are treated as
+--   **independent non-numeric variables** and added to `self.x`.
+
 the = {bins = 7, 
        seed = 1234567891,
        p    = 2,

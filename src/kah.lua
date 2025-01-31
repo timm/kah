@@ -303,6 +303,10 @@ function Data:neighbors(row1,rows,  f)--> a (rows, sorted by distance to row1)
   f = function(row2) return self:xdist(row1,row2) end
   return keysort(rows or self.rows, f) end
 
+-- random initialization
+function Data:anys(budget)--> rows
+  return many(rows or self.rows,budget) end
+
 -- kmeans++ initialization. Find  centroids are distance^2 from existing ones.
 function Data:around(budget,  rows,      z)--> rows
   rows = rows or self.rows
@@ -605,7 +609,10 @@ go["--branch"] = function(file,    data,Y,b4,S)
     shuffle(data.rows)
     S(Y(keysort(data:branch(20),Y)[1])) end end
 
-go["--comparez"] = function(file)
+local _comaprez
+go["--comparez"] = function(file) _comparez(file,"mu") end
+
+function _comparez(file,IT)  
   file = file or the.data
   local Budget = 25
   local Repeats = 50
@@ -620,38 +627,46 @@ go["--comparez"] = function(file)
     {"XPLORE", function() the.acq= "xplore";return data:acquire(Budget) end},
     {"ADAPT" , function() the.acq= "adapt" ;return data:acquire(Budget) end},
     {"SWAY"  , function() return data:branch(Budget-1) end},
-    {"  6"   , function() return data:around(6) end},
+    {"  6 "   , function() return data:around(6) end},
+    {"  6r"   , function() return data:anys(6) end},
     {" 12"   , function() return data:around(12) end},
+    {" 12r"   , function() return data:anys(12) end},
     {" 18"   , function() return data:around(18) end},
-    {" 24"   , function() return data:around(24) end},
-    {" 50"   , function() return data:around(50) end},
-    {"100"   , function() return data:around(100) end},
-    {"200"   , function() return data:around(200) end},
+    {" 18r"   , function() return data:anys(18) end},
+    {" 24 "   , function() return data:around(24) end},
+    {" 24r"   , function() return data:anys(24) end},
+    {" 50 "   , function() return data:around(50) end},
+    {" 50r"   , function() return data:anys(50) end},
+    {"100 "   , function() return data:around(100) end},
+    {"100r"   , function() return data:anys(100) end},
+    {"200 "   , function() return data:around(200) end},
+    {"200r"   , function() return data:anys(200) end},
     }
   local rxs={}
   for _,task in pairs(TASKS) do
-      io.stderr:write(".")
+      io.stderr:write("<"..task[1])
       push(rxs, push(task, Sample:new(task[1])))
       for _=1,Repeats do
         shuffle(data.rows)
         task[3]:add(BEST(task[2]())) end
+      io.stderr:write(">")
   end  
   print(" ")
   push(rxs,B4)
   push(TASKS, {"Before",true,B4})
   local sorted=Sample.merges(sort(rxs,lt"mu"),B4.sd * Epsilon)
   local names = map(TASKS,function(task) return task[1] end)
-  print("D,#R,#X,#Y,B4.mu,B4.lo,B4.sd,2B.mu",table.concat(names,","),",File")
+  print("D,#R,#X,#Y,B4.".. IT ..",B4.lo,B4.sd,2B."..IT,table.concat(names,","),",File")
   local report = {N((B4.mu - sorted[1]._meta.mu) /(B4.mu - B4.lo)),
            #data.rows,
            #data.cols.x,
            #data.cols.y,
-           fmt("%.0f",100*B4.mu),
+           fmt("%.0f",100*B4[IT]),
            fmt("%.0f",100*B4.lo),
            fmt("%.0f",100*B4.sd),
-           fmt("%.0f",100*sorted[1]._meta.mu)}
+           fmt("%.0f",100*sorted[1]._meta[IT])}
   for _,task in pairs(TASKS) do
-     push(report, fmt("%.0f %s",100*task[3].mu, task[3]._meta.rank)) end 
+     push(report, fmt("%.0f %s",100*task[3][IT], task[3]._meta.rank)) end 
   push(report, file:gsub("^.*/",""))
   print(table.concat(report,", ")) end 
 
